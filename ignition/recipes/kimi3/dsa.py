@@ -23,7 +23,8 @@ INDEX_HEADS, INDEX_DIM, TOPK = 32, 128, 2048
 class PreparedDSA:
     def __init__(self, weights, query_residual, key_input, weight_input, query, output, slots,
                  metadata, cache, index_cache, *, context, session, coordinator, name, workspace,
-                 buffers, allocator=None, eps=1e-5, mode="decode", latent=None, peers=None, index_peers=None):
+                 buffers, allocator=None, eps=1e-5, mode="decode", latent=None, peers=None, index_peers=None,
+                 decode_fusion=False):
         self.prefill = None
         if mode == "prefill" and context is not None and context.prefill_layout == "query_split":
             from .dsa_prefill import PreparedGatheredDSA
@@ -110,7 +111,7 @@ class PreparedDSA:
                 merge = PreparedDistributedTopK(local, scores, selected,
                     world=self.shards.world, rank=self.shards.index, runtime=context.candidates,
                     session=session, coordinator=coordinator, name=stage_name + ".candidates", buffers=cursor,
-                    workspace=workspace)
+                    workspace=workspace, decode_fusion=decode_fusion)
             gather = combine = paired = None
             q, attended = query[begin:end], output[begin:end]
             if self.gathered_context:
@@ -176,10 +177,17 @@ class PreparedDSA:
                 lengths = live.sum(1).to(torch.int32)
                 physical = torch.where(physical != torch.iinfo(torch.int32).max, physical, -1)
             else:
-                physical, lengths = selected_local_records(selected, positions, pages, world=shards.world,
-                    rank=shards.owner, page_size=PAGE_TOKENS)
-            self.physical[:count].copy_(physical)
-            self.counts[:count].copy_(lengths)
+                # The compaction kernel writes the retained buffers directly, so
+                # the per-stage copy into self.physical/self.counts disappears
+                # (one write per element instead of two). Bytes beyond each
+                # row's count are -1 and don't care; consumers read [0, count).
+                selected_local_records(selected, positions, pages, world=shards.world,
+                    rank=shards.owner, page_size=PAGE_TOKENS,
+                    out=self.physical[:count], count_out=self.counts[:count])
+                physical = lengths = None
+            if physical is not None:
+                self.physical[:count].copy_(physical)
+                self.counts[:count].copy_(lengths)
             if quantized is not None and paired is None:
                 quantized.copy_(self.query[begin:end].float().clamp(-448., 448.).to(torch.float8_e4m3fn))
             if gather is not None:
