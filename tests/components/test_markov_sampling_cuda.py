@@ -295,3 +295,47 @@ def test_uniform_endpoint_keeps_single_token_grammar_support_under_native_replay
     finally:
         worker.close()
         graph.reset()
+
+
+@pytest.mark.parametrize("capacity,vocab,rank", [
+    (0, 1024, 256), (1, 1024, 256), (2, 1024, 256), (3, 1024, 256),
+    (5, 1024, 256), (7, 1024, 256), (3, 163840, 512),
+])
+def test_packed_proposal_capacity_matches_full_prefix_under_replay(capacity, vocab, rank):
+    full = fixture(batch=1, depth=7, vocab=vocab, rank=rank, random=True, fp8=True)
+    tokens = torch.empty_like(full.tokens)
+    probabilities = torch.empty_like(full.probabilities)
+    valid = torch.empty_like(full.valid)
+    bounded = PreparedMarkovProposals(
+        full.base, full.embedding, full.head, full.pending, tokens, probabilities, valid,
+        full.state, full.slots, full.generations, full.live_rows, full.seeds, full.offsets,
+        proposal_capacity=capacity,
+    )
+    bounded.prepare()
+    assert len(bounded.kernels) == capacity + 1
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        full()
+        bounded()
+    for scenario in ("normal", "penalties", "invalid", "grammar", "inactive", "reused"):
+        full.base.normal_()
+        full.offsets.add_(28)
+        full.state.status.fill_(RUNNING if scenario != "inactive" else 0)
+        full.state.grammar_enabled.fill_(int(scenario == "grammar"))
+        full.state.grammar_mask.fill_(1 << 4)
+        full.state.parameters[0, 3:] = torch.tensor(
+            [1.11, 0.3, 0.2] if scenario == "penalties" else [1.0, 0.0, 0.0], device="cuda"
+        )
+        if scenario == "invalid":
+            full.base[:, :4, 17] = float("nan")
+        tokens.fill_(777)
+        probabilities.fill_(float("nan"))
+        valid.fill_(True)
+        graph.replay()
+        assert torch.equal(tokens[:, :capacity], full.tokens[:, :capacity])
+        assert torch.equal(valid[:, :capacity], full.valid[:, :capacity])
+        assert torch.equal(probabilities[:, :capacity].view(torch.int32),
+                           full.probabilities[:, :capacity].view(torch.int32))
+        assert (tokens[:, capacity:] == 0).all() and not valid[:, capacity:].any()
+        assert (probabilities[:, capacity:, 0] == 1).all()
+        assert (probabilities[:, capacity:, 1:] == 0).all()
