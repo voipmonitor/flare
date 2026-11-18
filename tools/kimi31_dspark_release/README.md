@@ -45,7 +45,7 @@ git clone --branch kimi-k31-dspark-tp16-prefill32k-runtime-v1 https://github.com
 cargo build --locked --release --manifest-path ../flare-runtime/flare-cli/Cargo.toml
 ```
 
-The qualified configuration is sixteen RTX PRO 6000 Blackwell Workstation GPUs, TP16/DCP16 and one active request. With one greedy output token, three distinct uncached 32,768-token prompts had a median of 2,632 input tokens/s on the native release. The same machine and executable with the PCIe parent achieved 552 input tokens/s. The nine-request coding decode median was 130.84 versus 127.77 output tokens/s. Both retained 2,304 KV pages and 116 snapshots under the default memory policy. The exact release can also be selected with `--memory-limit=-0G`.
+The qualified configuration is sixteen RTX PRO 6000 Blackwell Workstation GPUs, TP16/DCP16 and one active request. Three distinct uncached 32,768-token prompts with one requested output token measured a median of 2,632 input tokens/s on the native release. The client requested temperature zero with seed 17. The captured sampler fixes temperature at 1.0 and top-p at 0.95, and the runtime applies those captured values. The same machine and executable with the PCIe parent achieved 552 input tokens/s. The nine-request coding decode median was 130.84 versus 127.77 output tokens/s. Both retained 2,304 KV pages and 116 snapshots under the default memory policy. The exact release can also be selected with `--memory-limit=-0G`.
 
 In a separate full-from-capture replay, both original debug source paths were absent during PTX assembly. All 1,637 model files matched, with 84 independently emitted files and 1,553 inherited companions.
 
