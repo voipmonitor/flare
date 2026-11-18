@@ -319,6 +319,7 @@ def _normalize(
     Status,
     V: tl.constexpr,
     DEPTH: tl.constexpr,
+    ACTIVE_DEPTH: tl.constexpr,
     BLOCKS: tl.constexpr,
     PAD: tl.constexpr,
     CAPACITY: tl.constexpr,
@@ -327,28 +328,36 @@ def _normalize(
     BLOCK: tl.constexpr,
 ):
     block, row, step = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    if ACTIVE_DEPTH < DEPTH:
+        if step >= ACTIVE_DEPTH:
+            tl.store(Scores + (row * DEPTH + step) * V + token, (token == 0).to(tl.float32), token < V)
+            if block == 0:
+                tl.store(Tokens + row * DEPTH + step, 0)
+                tl.store(Valid + row * DEPTH + step, False)
+            return
     partial = tl.arange(0, PAD)
     maxima = tl.load(LseMax + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=-float("inf"))
     sums = tl.load(LseSum + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=0.0)
     bad = tl.load(Bad + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=0)
     maximum = tl.max(maxima, 0)
     total = tl.sum(tl.where(partial < BLOCKS, sums * tl.exp(maxima - maximum), 0.0), 0)
-    valid = (
+    scores_valid = (
         _row_live(Slots, Generations, LiveRows, Generation, Status, row, CAPACITY, BATCH, RUNNING)
         & (tl.sum(bad.to(tl.int32), 0) == 0)
         & (maximum == maximum)
         & (tl.abs(maximum) < float("inf"))
-        & (total > 0.0)
-        & (total < float("inf"))
     )
-    token = block * BLOCK + tl.arange(0, BLOCK)
+    valid = scores_valid & (total > 0.0) & (total < float("inf"))
     score = tl.load(Scores + (row * DEPTH + step) * V + token, token < V, other=-float("inf"))
     q = tl.exp(score - maximum) / total
     tl.store(Scores + (row * DEPTH + step) * V + token, tl.where(valid, q, (token == 0).to(tl.float32)), token < V)
     if block == 0:
         tl.store(Valid + row * DEPTH + step, valid)
-        if step == DEPTH - 1:
-            tl.store(Tokens + row * DEPTH + step, tl.where(valid, _previous(Maximum, Arg, row, BLOCKS, PAD), 0))
+        if step == ACTIVE_DEPTH - 1:
+            # At an interior step the full chain emits the token at the start of its successor.
+            token_valid = scores_valid if ACTIVE_DEPTH < DEPTH else valid
+            tl.store(Tokens + row * DEPTH + step, tl.where(token_valid, _previous(Maximum, Arg, row, BLOCKS, PAD), 0))
 
 
 class PreparedMarkovProposals:
@@ -389,6 +398,7 @@ class PreparedMarkovProposals:
         offsets,
         *,
         workspace=None,
+        proposal_capacity=None,
     ):
         if base.ndim != 3:
             raise ValueError("fused Markov logits require request, draft and vocabulary dimensions")
@@ -437,6 +447,9 @@ class PreparedMarkovProposals:
         self.tokens, self.probabilities, self.valid = tokens, probabilities, valid
         self.state, self.slots, self.generations, self.live_rows = (requests, slots, generations, live_rows)
         self.seeds, self.offsets = seeds, offsets
+        self.active_depth = depth if proposal_capacity is None else proposal_capacity
+        if type(self.active_depth) is not int or not 0 <= self.active_depth <= depth:
+            raise ValueError("proposal capacity must fit the logical Markov block")
         self.batch, self.depth, self.vocab, self.block = batch, depth, vocab, 256
         self.scratch = bind_scratch(self.scratch_layout(batch, depth, vocab), device=base.device, workspace=workspace)
         self.kernels = None
@@ -463,7 +476,7 @@ class PreparedMarkovProposals:
         )
         kernels = []
         s = self.scratch
-        for step in range(d):
+        for step in range(self.active_depth):
             before, after = (step - 1) % 2, step % 2
             kernels.append(
                 prepare_triton(
@@ -512,8 +525,8 @@ class PreparedMarkovProposals:
                     s["lse_max"],
                     s["lse_sum"],
                     s["bad"],
-                    s["maxima"][(d - 1) % 2],
-                    s["arguments"][(d - 1) % 2],
+                    s["maxima"][(self.active_depth - 1) % 2],
+                    s["arguments"][(self.active_depth - 1) % 2],
                     self.tokens,
                     self.valid,
                     self.slots,
@@ -525,6 +538,7 @@ class PreparedMarkovProposals:
                 (n, b, d),
                 V=v,
                 DEPTH=d,
+                ACTIVE_DEPTH=self.active_depth,
                 BLOCKS=n,
                 PAD=triton.next_power_of_2(n),
                 CAPACITY=self.state.capacity,
