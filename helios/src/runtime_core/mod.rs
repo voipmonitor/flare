@@ -671,6 +671,11 @@ impl NativeResources {
         core: &Core,
         phase: &Phase,
     ) -> Result<()> {
+        unsafe { self.prepare_kernel_subset(files,core,phase,None) }
+    }
+
+    unsafe fn prepare_kernel_subset<F:payload::ExecutableFiles>(
+        &mut self,files:&F,core:&Core,phase:&Phase,needed:Option<&std::collections::BTreeSet<usize>>) -> Result<()> {
         let driver = self.driver.clone();
         unsafe {
             driver.check("cuCtxSetCurrent", (driver.context_set)(self.context))?;
@@ -712,6 +717,7 @@ impl NativeResources {
                 phase.advance(1);
             }
             for function in &core.functions {
+                if needed.is_some_and(|ids| !ids.contains(&function.id)) {continue;}
                 let symbol = CString::new(function.symbol.as_str()).unwrap();
                 let mut handle = null_mut();
                 driver.check(
@@ -762,15 +768,19 @@ impl NativeResources {
         core: &Core,
         phase: &Phase,
     ) -> Result<()> {
-        unsafe { self.prepare_graphs_bounded(files,core,phase,&HashSet::new()) }
+        unsafe { self.prepare_graphs_bounded(files,core,phase,&HashSet::new(),false) }
     }
 
     unsafe fn prepare_graphs_bounded<F: payload::ExecutableFiles>(&mut self,files:&F,core:&Core,phase:&Phase,
-        frozen:&HashSet<usize>) -> Result<()> {
+        frozen:&HashSet<usize>,reuse_events:bool) -> Result<()> {
         let driver = self.driver.clone();
         unsafe {
             driver.check("cuCtxSetCurrent", (driver.context_set)(self.context))?;
             for name in &core.events {
+                if reuse_events {
+                    if !self.events.contains_key(name) {return Err(invalid(format!("rank {} missing resident event {name}",self.rank)));}
+                    continue;
+                }
                 let mut event = null_mut();
                 driver.check("cuEventCreate", (driver.event_create)(&mut event, 2))?;
                 self.events.insert(name.clone(), event);
@@ -790,9 +800,12 @@ impl NativeResources {
                 self.templates.push(handle);
                 let mut nodes = Vec::with_capacity(graph.node_count);
                 let mut records = files.graph_records(core, &graph.resource)?;
-                for _ in 0..graph.node_count {
+                for ordinal in 0..graph.node_count {
                     let node = protobuf::node(records.read()?)?;
-                    core.validate_node(&node)?;
+                    core.validate_node(&node).map_err(|err| {
+                        let function = match &node {Node::Kernel{function,..}=>Some(function), _=>None};
+                        invalid(format!("rank {} graph {} node {ordinal} function {function:?}: {err}",self.rank,graph.name))
+                    })?;
                     if let Node::Kernel { function, .. } = &node {
                         if !graph.functions.contains(function) {
                             return Err(invalid(
@@ -811,7 +824,7 @@ impl NativeResources {
                             arguments,
                             attributes,
                         } => {
-                            let function_handle = *self.functions.get(function).ok_or_else(|| invalid("graph references an unloaded function"))?;
+                            let function_handle = *self.functions.get(function).ok_or_else(|| invalid(format!("rank {} graph {} node {ordinal} lacks CUDA function {function}",self.rank,graph.name)))?;
                             let allowance =
                                 dynamic_shared.get_mut(&(function_handle as usize)).unwrap();
                             // Captured nodes retain their launch requirements even if later

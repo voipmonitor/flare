@@ -32,6 +32,7 @@ pub(super) struct RankPlan {
     pub images: Images,
     /// Challenger function ID and resident function ID with identical signed definition.
     pub reused: Vec<(usize,usize)>,
+    pub load_functions:BTreeSet<usize>,
 }
 pub(super) struct Plan {
     pub id:String,
@@ -130,35 +131,36 @@ pub(super) fn prepare(origin:&Origin,new_root:&Path,expected_id:&str,slots:&[Str
         let mut need_images:BTreeSet<String>=core.graphs.iter().map(|g|g.resource.clone()).collect();
         let used:BTreeSet<usize>=core.graphs.iter().flat_map(|g|g.functions.iter().copied()).collect();
         let mut reused=Vec::new();let mut fresh=BTreeSet::new();
-        for i in used {
+        for &i in &used {
             if available[rank].contains(&i) && matching_function(a,i,b,i) {
                 reused.push((i,i));
             } else {
                 fresh.insert(i);
             }
         }
-        core.functions.retain(|f|fresh.contains(&f.id));
-        let needed_modules:BTreeSet<String>=core.functions.iter().map(|f|f.module.clone()).collect();
+        // Graph validation needs the parameter ABI of every referenced function.
+        // Only the subset with no resident match gets a new CUfunction.
+        core.functions.retain(|f|used.contains(&f.id));
+        let needed_modules:BTreeSet<String>=core.functions.iter().filter(|f|fresh.contains(&f.id)).map(|f|f.module.clone()).collect();
         core.modules.retain(|m|needed_modules.contains(&m.name));
         for m in &core.modules {
             if !m.globals.is_empty(){return Err(invalid("a new comparison module requires persistent initialized globals"));}
             need_images.insert(m.file.clone());
         }
-        core.events.clear();
         let resources:BTreeMap<_,_>=b.resources.iter().filter_map(|r|{
             let name=format!("executable/{}",r.resource_id);
             need_images.contains(&name).then_some((name,r.clone()))
         }).collect();
         if resources.len()!=need_images.len(){return Err(invalid("replacement executable resource closure is incomplete"));}
         for res in resources.values(){needs.insert(res.stored.as_ref().ok_or_else(||invalid("missing stored program bytes"))?.payload_id.clone());}
-        descriptors.push(resources);specs.push((core,reused));
+        descriptors.push(resources);specs.push((core,reused,fresh));
     }
     let companions:BTreeSet<String>=meta.locations.locations.iter()
         .filter(|l|needs.contains(&l.payload_id) && !l.file.is_empty()).map(|l|l.file.clone()).collect();
     let payloads=meta.payloads(new.catalog(),needs.iter().map(Vec::as_slice))?;
     let authorized=new.authorize(&origin.publisher.namespace)?;
     let mut ranks=Vec::new();let mut executable_bytes=0u64;
-    for ((core,reused),resources) in specs.into_iter().zip(descriptors) {
+    for ((core,reused,load_functions),resources) in specs.into_iter().zip(descriptors) {
         let mut images=HashMap::new();
         for (name,res) in resources {
             let stored=res.stored.as_ref().unwrap();
@@ -172,7 +174,27 @@ pub(super) fn prepare(origin:&Origin,new_root:&Path,expected_id:&str,slots:&[Str
             executable_bytes=executable_bytes.checked_add(stored.nbytes).ok_or_else(||invalid("total program size overflow"))?;
             images.insert(name,decoded);
         }
-        ranks.push(RankPlan{core,images:Images(images),reused});
+        let images=Images(images);
+        for g in &core.graphs {
+            let mut reader=images.graph_records(&core,&g.resource)?;
+            let declared:BTreeSet<_>=g.functions.iter().copied().collect();
+            let rank=ranks.len();
+            for ordinal in 0..g.node_count {
+                let node=protobuf::node(reader.read()?)?;
+                let function=if let super::format::Node::Kernel{function,..}=&node{Some(*function)}else{None};
+                if function.is_some_and(|id|!declared.contains(&id)) {
+                    return Err(invalid(format!("rank {rank} graph {} node {ordinal} undeclared function {function:?}",g.name)));
+                }
+                core.validate_node(&node).map_err(|err|invalid(format!("rank {rank} graph {} node {ordinal} function {function:?}: {err}",g.name)))?;
+            }
+            let mut deps=super::format::Dependencies::new(g.node_count);
+            for ordinal in 0..g.edge_count {
+                let edge=protobuf::edge(reader.read()?)?;
+                deps.add(&edge).map_err(|err|invalid(format!("rank {rank} graph {} edge {ordinal}: {err}",g.name)))?;
+            }
+            deps.finish()?;reader.finish()?;
+        }
+        ranks.push(RankPlan{core,images,reused,load_functions});
     }
     Ok(Plan{id,ranks,executable_bytes,companions:companions.into_iter().collect()})
 }
@@ -271,8 +293,8 @@ impl super::NativeResources {
         let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // SAFETY: CPU verification proved the unchanged allocation/peer/control ABI.
             unsafe {
-                self.prepare_kernels(&plan.images,&plan.core,&phase)?;
-                self.prepare_graphs_bounded(&plan.images,&plan.core,&phase,&locked)
+                self.prepare_kernel_subset(&plan.images,&plan.core,&phase,Some(&plan.load_functions))?;
+                self.prepare_graphs_bounded(&plan.images,&plan.core,&phase,&locked,true)
             }
         })).unwrap_or_else(|_|Err(invalid("replacement graph construction panicked")));
         self.functions=frozen;
@@ -347,7 +369,7 @@ impl super::NativeModel {
              "free_bytes_before":free_before,"free_bytes_after_retire":free_retired,
              "free_bytes_after_install":free_installed,
              "loaded_cubins_per_rank":plan.ranks.iter().map(|r|r.core.modules.len()).collect::<Vec<_>>(),
-             "loaded_functions_per_rank":plan.ranks.iter().map(|r|r.core.functions.len()).collect::<Vec<_>>()}))
+             "loaded_functions_per_rank":plan.ranks.iter().map(|r|r.load_functions.len()).collect::<Vec<_>>()}))
     }
 }
 
@@ -365,6 +387,6 @@ pub fn inspect_plan(old_root:&Path,next_root:&Path,id:&str,publishers:&[Publishe
     let plan=prepare(&origin,next_root,id,&names,&available)?;
     Ok(serde_json::json!({"candidate":plan.id,"stored_executable_bytes":plan.executable_bytes,"slots":names,"executable_companions":plan.companions,
         "ranks":plan.ranks.iter().map(|r|serde_json::json!({"changed":r.core.graphs.iter().map(|g|&g.name).collect::<Vec<_>>(),
-                "reused_functions":r.reused.len(),"additional_functions":r.core.functions.len(),"additional_modules":r.core.modules.len(),
+                "reused_functions":r.reused.len(),"additional_functions":r.load_functions.len(),"additional_modules":r.core.modules.len(),
                 "programs":r.images.0.len()})).collect::<Vec<_>>() }))
 }
