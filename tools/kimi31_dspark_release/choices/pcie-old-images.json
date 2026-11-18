@@ -1,0 +1,482 @@
+{
+  "0": {
+    "island-512-1-1": {
+      "sha256": "991b00f214a7c9c683fdf7a3c6b96eca6927095292d37671ad668e3a197a74fa",
+      "code_sha256": "b28b912b043ba2e9ebdb5da59f3cdd155b0d930ffe672349d204867230eed58f"
+    },
+    "island-768-1-1": {
+      "sha256": "26134e7ad50697a0c417bc8590e918814eeed47f8dbd67b8d9d951edf485554d",
+      "code_sha256": "a12bf3057912aa20906210c9436d9a15214846ae2139013f84589c0ee64fb7cc"
+    },
+    "island-1024-1-1": {
+      "sha256": "2d9863333d40bd9e1729247bb2c77360282eaf4e1dd75fb22cd9b0ef27b22f3c",
+      "code_sha256": "aff20cc2d07a1317469bd6bcf1ee5b1b84029482f045bcec7e0e07a8d40d9a54"
+    },
+    "ring-168-128": {
+      "sha256": "09101fd5cc7367ce866285f08e4fb1426dc65dbc342774f511868bc72a4affda",
+      "code_sha256": "8f6b15148b3522b6a2a8c01f98925191faf6a0617f61e47db53de7148891b56a"
+    },
+    "ring-224-128": {
+      "sha256": "9aa64caff0a1290047a5171c91d6b7a2083ea08019aa9cb0e819afc6832741a5",
+      "code_sha256": "c2fa8e6f4b4bd62094e217ed0e0f4543273d4e90b8c6cca65afe542d9b85a8f4"
+    },
+    "ring-4096-128": {
+      "sha256": "2a800b88b389d8c1812a94a685e19fb0162bfcc4f6882b1d9999ae4624228174",
+      "code_sha256": "ea30b0df9b5a29eb2781791ff1239899dde966593df3a07098ce2b3dd647311c"
+    },
+    "ring-5120-128": {
+      "sha256": "944c7fc3dd2d1d8f3502f2b6dc85947c934b8d46b38dd1675c2dd389785a4130",
+      "code_sha256": "7553abec85cb272796f80c7967b07addda27996f023416416d0caec663e34acc"
+    }
+  },
+  "1": {
+    "island-512-1-1": {
+      "sha256": "7491c53cba4365966a5c19da032abeff85945be4c24c086b850353800e17acfa",
+      "code_sha256": "16b642f46603d67ca6d4e92001b38984ceb83591c5cf6e369bd6186eda0b9a6d"
+    },
+    "island-768-1-1": {
+      "sha256": "38aebd06fd19779c28ee260d421ed015080042c28e0650b417f602bcc255b8b1",
+      "code_sha256": "f8c66f4c0077503bb37deb872a4443957704c46226daf8a63caed857506f2d25"
+    },
+    "island-1024-1-1": {
+      "sha256": "08c2dd5d3ce558839de95b5ee003b136e7d098e6d3026c4f03334a2eb1055271",
+      "code_sha256": "98ea53b6c3f4da95295a6f30ab28ebb9f2355334522153748a3f5ec9c2b826a1"
+    },
+    "ring-168-128": {
+      "sha256": "e4644b69a38cc5259e32383eef58fc2775db56e05bb5ed50b43dc25245488fb6",
+      "code_sha256": "060a453c1ca81227fbf8e7ff68102743ff08f17bfb758a5bfa6f19fa28bdc1e9"
+    },
+    "ring-224-128": {
+      "sha256": "fce6dd75bec244ea51884c59be9260b1cd4168eae9f7515c1de7cfd20e01f7ff",
+      "code_sha256": "633f913368cf828d896021df4515f0efe011fee25de7a5a22e0a5d3e938dc4d6"
+    },
+    "ring-4096-128": {
+      "sha256": "5bdcc0318ad39a3c556bd3be259bccce2821ff3af95a1bad4e0116d82498e326",
+      "code_sha256": "1aa05246fb9b2bbc79b04308b805b79dc07428231bb151fdeb853272ba19fbc8"
+    },
+    "ring-5120-128": {
+      "sha256": "7f42cac86f81654c2b4b21851e9d12a4091f30b04c503b810444f032573ae5eb",
+      "code_sha256": "d8499fb7a626cdec5ed4b06b9656b0ed8dd206d3465b5817e1f938c4b610ccd9"
+    }
+  },
+  "2": {
+    "island-512-1-1": {
+      "sha256": "4d3faf698fa7fd1af014c41459bf85dcc388cf2a6d67f80f1ad2b864a9af0082",
+      "code_sha256": "15acd40f56b832e5d4aa0881d7b79a5e764487dc8ac87f3093dcdc62ce40d0d3"
+    },
+    "island-768-1-1": {
+      "sha256": "d9114a9c37c97db34463bb1824b4b7ea3e0a75febec0be59281bad5b0847b178",
+      "code_sha256": "e0a58451f2110d3de52ee09f1f13b27450b9622803a6793433437146e9b3072b"
+    },
+    "island-1024-1-1": {
+      "sha256": "4f5b8763f158b3072de40169ad5e437632945c7cf7684fcf50cb810ca09908dd",
+      "code_sha256": "bff6266f9c9888530f85329ea3f44a5a915d9ec386743f0be11cb5a894007fe4"
+    },
+    "ring-168-128": {
+      "sha256": "ef6109b49905170573fe0fe01b412cb798e4f83c83afff3cde25665ebff7eeb7",
+      "code_sha256": "8bbb2931b17da4a0566b49b0f1140a9cb1f6fbf6468445f5b543f83e1954f84a"
+    },
+    "ring-224-128": {
+      "sha256": "02322d5a7ef1d7b20a85176cd3e405b9e003fb1f4038d929bdf47233a3a65eb7",
+      "code_sha256": "224abebece2e46c3c2e00ecd0453043e6c7b06ce84b5b6b3531ed16439792df7"
+    },
+    "ring-4096-128": {
+      "sha256": "4a4c5e713546cdaaf3ab908dc2e1f6b448ab74501075f3f28600a45c925ab330",
+      "code_sha256": "386df2e61eb18e1e365245484f8ef820564c004eb82e7963a1ea9ceb54eb94c2"
+    },
+    "ring-5120-128": {
+      "sha256": "bd7ae3bc19be1cf461839934f908ae670abc8559bacf27e45f073a5aedc4260c",
+      "code_sha256": "5603a0b7cde9895950e7b8642e1a928937281c240fe3d012049d2415e286e1d1"
+    }
+  },
+  "3": {
+    "island-512-1-1": {
+      "sha256": "60a31df28d99d41b79aaadc6a03bed9c88a66b4466b782790910ed541d3ac0de",
+      "code_sha256": "61ded04aa9482613045fcb5019d589f76ae7de505621bfe2cb8b59fb040308f7"
+    },
+    "island-768-1-1": {
+      "sha256": "fd39b2b25a7372cca5dafdf0d105494ccbae9c60d9932119b79a2baad682df88",
+      "code_sha256": "93a3aad2b167fba14edc61eb88ef001b14f0824cbdda6f15e2d8a4af44f30293"
+    },
+    "island-1024-1-1": {
+      "sha256": "4b1fce3630bbf8a0fd701220df939f3e6cc771280c2f28eb3515dda675ca00fb",
+      "code_sha256": "e7ff6053b549fc11568dec26415b053ac62da998a8ada36754edd575cbcadcb9"
+    },
+    "ring-168-128": {
+      "sha256": "194be0e641f8b03a5059935a790e198759d107f08ed530553635fe1d056cb57d",
+      "code_sha256": "909b9d19fb12ce5126f60fdb7ee9e1bac93a17d61e3612119029baa6508b8217"
+    },
+    "ring-224-128": {
+      "sha256": "c657f41a41ab27c99bcc899f2cf0fdd856ab81e33bf3c4eed5124838e876d4ac",
+      "code_sha256": "da79f75eefe953dff2788b36d164f7b2ab857f6203daaa0230f0a74aff080526"
+    },
+    "ring-4096-128": {
+      "sha256": "57aa4e476c8d2046d4003b65ff8164d4a21f54c96a21c6d293223bfd29a81fc5",
+      "code_sha256": "4ac52b472374d4687ee9435af143fff9d58eb5fef3e06a101f828cb98b3c522e"
+    },
+    "ring-5120-128": {
+      "sha256": "c79fca464cb826513d4263f1cd5b3c9ce3da275ec4dec9b8851e5521f600cc59",
+      "code_sha256": "28cbef8a3ffcd102ffd9c14c7c8028e2606b3491e688c891563f5cd19532388c"
+    }
+  },
+  "4": {
+    "island-512-1-1": {
+      "sha256": "415893d5e1160be49369f4e1cef4d254c76ca493628762c970fb2b4902348e0a",
+      "code_sha256": "dd7d83776d3dcdfd5e8a321a986742f58877f7ac411e69bdecf6b109effd16ce"
+    },
+    "island-768-1-1": {
+      "sha256": "a3e5966545beb82000e3edc45da2bf2c4c053ad99a081168c031740b86d12e58",
+      "code_sha256": "08d9e6db3d50ec871730bae26ba5a4bb32a061accc88cffcd83ba069792f7ef3"
+    },
+    "island-1024-1-1": {
+      "sha256": "69ccd419e740de4f26e49581438ca5e1ebe24804291307ab5f0572552a590ce1",
+      "code_sha256": "8a3cf7292a8da7d97f621fc7fb1d4895ba7c7c82cb76d5cbf6345c7a6585aa2d"
+    },
+    "ring-168-128": {
+      "sha256": "b34d0994f1dc9714d050319c774174838faaec6c454861829d9a279d4cd8e3b2",
+      "code_sha256": "1cca92cb6877c41c4d343c5eb3fbe46ea5f4fa9b58ba35e7bf70bac2503b001d"
+    },
+    "ring-224-128": {
+      "sha256": "b079254f5756326a9c6c4899ee5c26ccf035a4857dbfbf202b897dbc5535a6af",
+      "code_sha256": "438f592b87a4df42eca1b468ea2de803fc6f4c9d81ef5b4a11f639440c9236c2"
+    },
+    "ring-4096-128": {
+      "sha256": "7f727d452e419a18198bce91aa1b0edbd56e48001f3b4e16bf5f86b74b8ca874",
+      "code_sha256": "75c1673661ade3247e3e72deaba0c9bdcdcbb95dbb79e99f1fb1ca0e4006e2b8"
+    },
+    "ring-5120-128": {
+      "sha256": "52a009b860cd0dd0db950ccf5f5cc574bcbf09dbba565c42b8875371e69770cc",
+      "code_sha256": "33c25a3f095e943031f834f43ecd4c505da54dc672aa0ba40a65780ec6b8a544"
+    }
+  },
+  "5": {
+    "island-512-1-1": {
+      "sha256": "cd884dd32a62e18f71d5b13db268b8891dcd40dc9b0b12b8ec6266b523ee5595",
+      "code_sha256": "58e1fbadc50e2b2841328cf9c420590e87fbfaa553d0f7ab9c0f7f5a30ce199e"
+    },
+    "island-768-1-1": {
+      "sha256": "9542428b2ba79c3352856c467d406eb8b8218a1107bfbba79f72e68b1b69137b",
+      "code_sha256": "8351fd8e571092cf769834b458731186807fdc48a39a3ffa75fc328b0b2451a8"
+    },
+    "island-1024-1-1": {
+      "sha256": "e7fad2a472e3c0e805432b373eebf7f4cb39d7014b6cbb7f16921679ca8f234e",
+      "code_sha256": "55b701b9b5b605673b100fa93201969624c258a154e09ee27b0a517f5b6493fb"
+    },
+    "ring-168-128": {
+      "sha256": "74815a40e741ac334758e72bcf9f4499a9becf75020a288392f2a45f84435ad8",
+      "code_sha256": "b7632d4d5d07094ea2a9c901948326b1b7f368504e8b8d81a22f746327ffb69d"
+    },
+    "ring-224-128": {
+      "sha256": "45787c23e951644c1a6629396cf0fd94fc8799ff50d7492bbee1a36bdd7c0922",
+      "code_sha256": "c50f81b485873a047c7bf295dafce41cee97de97bfe7b465046e281126213707"
+    },
+    "ring-4096-128": {
+      "sha256": "09848bf1659402e19f19a78ad91659abd06b72d32656ec751e72984f8aa92ddb",
+      "code_sha256": "5d086a85a0634fc4592ae86b58b70563207c70113881da1fb1f5d4dc29f739bb"
+    },
+    "ring-5120-128": {
+      "sha256": "4e1ffa4c6b1bafc199acd81ef1a7b8e266ee5794837fad5d564b7c3bd4337248",
+      "code_sha256": "ef5ce1a717944e00ad97bf13338f9e8197bdf689077d7efc8552192dd409bb3b"
+    }
+  },
+  "6": {
+    "island-512-1-1": {
+      "sha256": "99dc95354c9ce46205f68f49a7170d8e58a4b6ad4ee1ee8e528f517bc95be327",
+      "code_sha256": "aac237cf0cd8a30f43c1ae66b5d56570179190db574ccf8d9603d0bf238c9999"
+    },
+    "island-768-1-1": {
+      "sha256": "b247558ebdbdbfbc6a1ccb8b1d06ae860d0a64f73028e84a9c96a97d886c2bb5",
+      "code_sha256": "3b33939c55c16c4df86875b0322cf011bbe5501e9119b98e0c2f80c881a28d4c"
+    },
+    "island-1024-1-1": {
+      "sha256": "377a50101f9257fce595bebdd67986fe781eb7c4e99b1a791a926da20013db74",
+      "code_sha256": "50b84f980eda876de51b78908858fc383f334b9decc9b41c71f8879968311508"
+    },
+    "ring-168-128": {
+      "sha256": "776ebdba66fdc3e6881c3fd77697a66551d084e1b54cad91e7ccab112be9f240",
+      "code_sha256": "644aca886f941068a762aac33f64db3956d0c06c89b309cae76e0ea251bea578"
+    },
+    "ring-224-128": {
+      "sha256": "b7964d8c1c152b4393c3b3ee24e7e0910f5545fbbb76e5f55fa679dcd66a591b",
+      "code_sha256": "7368444889fb8aefbf911b0bdb612c9116aa2df043449497c654fbe6e0543302"
+    },
+    "ring-4096-128": {
+      "sha256": "2c918037f8cb97e6033461a4156c7d907be9a938f454ab84346754f9ed32f31f",
+      "code_sha256": "e22fae7a3e75732e20189455c37a25d1ff4fd18c79db5a006afc89017fa2bbc1"
+    },
+    "ring-5120-128": {
+      "sha256": "b9e7d6351cabe5c3ee1de54b7b02dd37fa8bf621eef9da3b60d0e0c993bbb9af",
+      "code_sha256": "6d84019f56a91838f079c3f02a7f3c7301531fb58252690598c17a77e15c2097"
+    }
+  },
+  "7": {
+    "island-512-1-1": {
+      "sha256": "f72ede10fa3775c30b2daeaeaf586a55955156419ce39f4d1c5d9289107822c8",
+      "code_sha256": "4810b8fba03bef3825401591c9b4a9330057ef428c95074f4d9a4ebb22c4992f"
+    },
+    "island-768-1-1": {
+      "sha256": "2b7af5493606f51cc7c935962317ae14f9bd1d1f3aca393b91c2e7f336a2be1d",
+      "code_sha256": "076018961e389d00800c88d342fb438ed1f0eec38bece64fff2114eef9ece376"
+    },
+    "island-1024-1-1": {
+      "sha256": "966f2cfb5b545e78397a782621d3b6fb6f76f9c1e08891d92fb956d8f80f58cf",
+      "code_sha256": "e2ca9daca6f96fcde03fd05f544219a5c0a7c157fe36bcdb1e1f69cedeb9eca8"
+    },
+    "ring-168-128": {
+      "sha256": "6635932212c1308450de006200e4c9c9bccbe76b3a03fe09ceae4905216f2e2f",
+      "code_sha256": "8cc38941cb12879b62d0758a8d1c49bd260d211cddb63ae2774ef0f136f3c2ef"
+    },
+    "ring-224-128": {
+      "sha256": "3d39542803054d570c458cfff4038c1fbbdcd3ca0b1edec9abbdc6e241cabe7d",
+      "code_sha256": "ca14a13cb61cbb5138681d799e93aa8ec23642162ec30893e71d99d6f2aceade"
+    },
+    "ring-4096-128": {
+      "sha256": "a79d7b134f6b0683c56dea2b0ad4ae2f5b1bf21a9ae8e15b336b492b02d57f0d",
+      "code_sha256": "34bdfdc4a35abb93569193dc240605d0ed23d44296d58a403fd823ce849eb5b5"
+    },
+    "ring-5120-128": {
+      "sha256": "d0b9afdbe3c4c887cdca58899c336f17cd69efa6951fece6a54750b86ac0919c",
+      "code_sha256": "f65e9e1f409dcf3887ab02e4ce9869217ec1464131a7921842331c09a43ab3a5"
+    }
+  },
+  "8": {
+    "island-512-1-1": {
+      "sha256": "bb47768343b4fd4dddb7bf75eec7268c73d2e62a6b4d6d7fbe7d31d90e961470",
+      "code_sha256": "a10cad04d1f30372297590e3121cc365791b155bd2c73f460fa2fb39b2afca21"
+    },
+    "island-768-1-1": {
+      "sha256": "87db964a4387754e50fccc684a5eee8033c18f9318a42691ac2aa78f31d24a40",
+      "code_sha256": "38572ecf1494905423881ba1e8dd6aabdbc38ffcc2dd99005c381d4cc5fd59c8"
+    },
+    "island-1024-1-1": {
+      "sha256": "a0aa2533e59300aef3ef7a5bc1c4d5427bed177499a83fdaa86e9b936044d88d",
+      "code_sha256": "6350f36937adf79bee6eda9967135b63b98d451e61b0b3a4a365743a59218b84"
+    },
+    "ring-168-128": {
+      "sha256": "1b3b0ce0d5b0ef8bf0f53beea3a85cb97f0115a97caee35e8665ab685ef75c19",
+      "code_sha256": "686e0a591387876db85fbf1fac4a6e3a83952097ea01e8471d4679106da7ab51"
+    },
+    "ring-224-128": {
+      "sha256": "ed666a2a464adaf909ad67e1b2445191c177eac7c1b1e0af6999b1c18c0a4bbb",
+      "code_sha256": "fdab60ccb26a9ae3703e0f43f361ec45058a3e56baee4d69c814b6d6b7314b75"
+    },
+    "ring-4096-128": {
+      "sha256": "eaa459b81767e39e52a6743dc50d0bb791d5c4615b42d9ece06da9502d8ae448",
+      "code_sha256": "bb4c1ef25b0056f65b2fa2da8734eaf85eb45ece88b9547e92d87d249e9ef4a7"
+    },
+    "ring-5120-128": {
+      "sha256": "ba89467a7d0fe72db0ec1f7b0ec2fcce7544d36bbb7875ed8d43719420b9f12b",
+      "code_sha256": "4d66fa3b6378a4b9f89b8a228900371bbdf4aa4714747870ba0ed61668021e5e"
+    }
+  },
+  "9": {
+    "island-512-1-1": {
+      "sha256": "3ad0fddd0f8b6f41b54991f216f6debfe8436e887d45b53da8c5503eb51018ab",
+      "code_sha256": "3e14cee783946c267e12e6c3a3fbdea5cc04206822732a7c957481e61e6ebd1d"
+    },
+    "island-768-1-1": {
+      "sha256": "7542f7acef025f7ca4db33ad4e75061f3e8217dff6879002c988f302deb00b34",
+      "code_sha256": "8241542da82ba2cd09b2b041462dcbff21baf43cc60293cbb3c5994d57b85f79"
+    },
+    "island-1024-1-1": {
+      "sha256": "01ed00be4bfc6fba84f4eda9c458565218494ab3636552f62aacae7740dbf451",
+      "code_sha256": "5d40fe0c2c7d7a239244e29c55f3660166fa745f25cedf805eede5be8d669d88"
+    },
+    "ring-168-128": {
+      "sha256": "b1abea6169d6fb81ec5ad5f5afdfcc5cfd72e6c9d1880fb6736c942988116e7c",
+      "code_sha256": "b5e3966c1b4b453aae08efdf67b86dba67b9c169c51bc7abd109dec13a3081ee"
+    },
+    "ring-224-128": {
+      "sha256": "2f8947c9dc38f5a0ae4a41fc8e4fa00c336415b5ed977a16abbe110542e208ae",
+      "code_sha256": "5d369c415e0f950352df33c4c63150cbf6d81b7f3845fa7b5775dc13937ed64e"
+    },
+    "ring-4096-128": {
+      "sha256": "db19f757afb271647d6ef17ab0c9ef3d9a05273ee7411ac7a2258aa2b49f7867",
+      "code_sha256": "8c11900d80cb4c27d98abcad1157d62deae0020d6dcfe29a5bd96f5d697990ce"
+    },
+    "ring-5120-128": {
+      "sha256": "80d9b766aefa415689aa445435f97f92bfbc61c41f62549c622b2ef6cb02cab6",
+      "code_sha256": "3c641fdf965717d5ea96265d82d8b361a890091edd59e47da067d51ac3fd73f4"
+    }
+  },
+  "10": {
+    "island-512-1-1": {
+      "sha256": "d9218a0ae23442212eeb79bc0f16ba2226cea2e9135403b138d85c1527ac32c6",
+      "code_sha256": "0ecaa54e4272286b4f4388bab4f6eb1f7728f4b25f3905025cc5be79c40ac102"
+    },
+    "island-768-1-1": {
+      "sha256": "6d75172769338651bc051038ef8a4b4562b76bee9a3b4bf4efee67467680c6c5",
+      "code_sha256": "0c1add41137fc247d5a675724abcf63a42066fc5593e560f692f08e6885f9cd6"
+    },
+    "island-1024-1-1": {
+      "sha256": "1abd1861231369ca71d1aae58bbb282a84e0b6042c5236ec98fdf022a549bd31",
+      "code_sha256": "e221c738778473ad7fafa71ee34161b92dfbfdc8c53c660cc7bf60dffd6ae9bd"
+    },
+    "ring-168-128": {
+      "sha256": "aabaa55d8bb8093e7b85ec9f4fd466965f88825e52087d5bb27cfb356381292b",
+      "code_sha256": "490739693ae9cd9086e913b3155366900e4dbe17cdd63d8c1a9ac6e415016b8d"
+    },
+    "ring-224-128": {
+      "sha256": "68edc60d26c7a904a8dcf60391a959d11a57c7aafdf5e6e02077ee870419db73",
+      "code_sha256": "00e18468b1d525fe12a401e4c6a0235eab1a713646f0c69f663d53c910912365"
+    },
+    "ring-4096-128": {
+      "sha256": "4dca48050025a30c25f1861d87a2faeff823cadc694347be94623679f7f01d63",
+      "code_sha256": "8cb7362cb268270f4cde34b5a4c8ad98fa5bcc618e6dceb338c4ea9f51a886cd"
+    },
+    "ring-5120-128": {
+      "sha256": "9f61f8f301f05bd4835e68c5a5deea0ef6a3cde368e8d43a7807b0b29771244a",
+      "code_sha256": "72f61136c0d3690bcf4b304e55a1c220e521c811a250e3f370c446ad9338e80d"
+    }
+  },
+  "11": {
+    "island-512-1-1": {
+      "sha256": "d39356ed52116e822a8ce4a429992495661ffae7499d2702aa28b0ad54d0b716",
+      "code_sha256": "a77283754bbb47c88cb503d34cff80fb7d2ee40aa24a3bf5b06ad9d1dc03f765"
+    },
+    "island-768-1-1": {
+      "sha256": "b990473a3c5b096bbcfd6f5a5203131585f7ae1c923c9edef2976c5946210ba7",
+      "code_sha256": "bcf04b74160a7022d27759359d422b4c997c84e0e92d6418aa07ecc37081ab55"
+    },
+    "island-1024-1-1": {
+      "sha256": "0f18d7fea71ffcb83ecc2f0fda773a8a268ae881c3fc76bfa8f7eae0aa762df0",
+      "code_sha256": "7d85ee3347cf896143a9b4f0c46b9b82da32b0cbaf3fbe4c88d74ff0d8a96157"
+    },
+    "ring-168-128": {
+      "sha256": "5408fdd08118f86d6397752faa0defc36909841ceffbdc426760349b6fd8c1e6",
+      "code_sha256": "8c9546f269d81cfeb7d0fceacbf7281a38c4eda43033670dd7f9fff746396a6b"
+    },
+    "ring-224-128": {
+      "sha256": "72b8d239c2c69921b6aaa772758869a11b83195ea415de7f2af5be59ec01167f",
+      "code_sha256": "fcd0bbedcddc973acde959d85f7a44588f2aceee0526cc20892252ccf7afa52f"
+    },
+    "ring-4096-128": {
+      "sha256": "348a98cb51de3df05b0adc56fca6812890f6e1f13614a24233dd973851eaa9c9",
+      "code_sha256": "0c1f829497731613cbf678d4552f61280d2b9d2427a91027a1dfd82f4cc68214"
+    },
+    "ring-5120-128": {
+      "sha256": "c00eeef12638dd10e21464d5d6b47e0f8ffb4d4db7ca66bea73c91af285c4855",
+      "code_sha256": "ff80abde0b60cc531f61a6b67b427e302df5ee915c58d0e45a5830be9c060185"
+    }
+  },
+  "12": {
+    "island-512-1-1": {
+      "sha256": "fdef1615f8c3e55adbe4001f35a792e11fbf565634f55651324aaedc8825daab",
+      "code_sha256": "90197a8b4fc52d90d0565040d6f7dc98d911027a2ac0a2a41776de924cc6f0ab"
+    },
+    "island-768-1-1": {
+      "sha256": "2f5f4c3d013fe685e7f93d1cf739812588dc20c1ff40ae80073ee52c74366d38",
+      "code_sha256": "55ec691a9e19d96517c35e5eac22545e8e25863bfaa9394241ea503cd4d5886e"
+    },
+    "island-1024-1-1": {
+      "sha256": "8f6d08396622565294def1d216dc58fedc376d0e65fcfae5bc50105dff8ad019",
+      "code_sha256": "0903a5efcbed2184f86d0f0cd6b8530fa4c2751a3ceb3b571e11cd1a0c333fd0"
+    },
+    "ring-168-128": {
+      "sha256": "061cba5cb3ff9db13948d867a3ede72812f24df3cec2d13df960639842ed7780",
+      "code_sha256": "b54087aa63bc406ce9cc2c087837e03abd449cfb7a6fe56d5bcf6c6fb44654f2"
+    },
+    "ring-224-128": {
+      "sha256": "fd8b32035a7fd182eee5abda82956da1bebfeac63a771eba6257703b24df4ad4",
+      "code_sha256": "502589d889b47e1647bae25f2841b56bcce15b628becadf80e2d7d3f133f3742"
+    },
+    "ring-4096-128": {
+      "sha256": "913af5fc092ce0197619c11bc89f2337665d6c67b44d0961fda8eb882944066c",
+      "code_sha256": "cf6134f0381b6774e0ecd33c420d5069def1d49c411c7868f978a9a00d1fa513"
+    },
+    "ring-5120-128": {
+      "sha256": "b7fd38434f0a047803f32c514ba6b4ba349bad7994ab50f3eaa749da04c07fd6",
+      "code_sha256": "8452a844c5dac712c23a5775511cda55082e838ee11bd42efc3b6a655a92975e"
+    }
+  },
+  "13": {
+    "island-512-1-1": {
+      "sha256": "efe021d5497189296ac2b405bf17b539397946c866d565a2fe574f675269600d",
+      "code_sha256": "14b188de75db1b3ae9ba1a0ecb9c82e49f8a121720c28524c490c9d0594ff0b8"
+    },
+    "island-768-1-1": {
+      "sha256": "1d421fd509bf98233ed3e72da8e6ef23601dc5e2b93a2eb20f44832009775459",
+      "code_sha256": "c5d248aff37af75d3a3d1a8cb7ef963de69109e128268c88e91bab1b9d234962"
+    },
+    "island-1024-1-1": {
+      "sha256": "6d560d43c319dcac6394f855bc67ffec373f26e3cd51e6afc26b7a14313b0894",
+      "code_sha256": "cdbfe89f1d0b0bf19bc3765be878b3e4db07b826af09f863a58ffe32a1026074"
+    },
+    "ring-168-128": {
+      "sha256": "08cfca9bfed9d61cbcb006adf9af57e5d88245e3b427bf8fbdc62e1edcee03ec",
+      "code_sha256": "bd54b8b36b2402ed84414e9b9bdc67710948361bd8994e8679dcf3730187cc70"
+    },
+    "ring-224-128": {
+      "sha256": "f36c0b53a0506072b8376e433e0ba9303c5a41ae8e6af66205cba2eade8453a2",
+      "code_sha256": "2e0d68fdee277ab059977a8b0174517d33b2f3be06d549af862516179ba0f1dc"
+    },
+    "ring-4096-128": {
+      "sha256": "30db9ccbf93ff9b6d849edc95218fe7773bdd5e6fd043faa6b6e68333e4ba9ff",
+      "code_sha256": "e431363b69487b1bb46ef8276971877041a84240a085247d138dcdf4c720350a"
+    },
+    "ring-5120-128": {
+      "sha256": "a27189bf8c1fafbddb1918e071e04c5ac926f488df88bc620765beeb3090811e",
+      "code_sha256": "4cd5b0bdf89a211f8806cec47983fd6db27c3bab0bab9540819122f732b45465"
+    }
+  },
+  "14": {
+    "island-512-1-1": {
+      "sha256": "c4a1a6679f514cc2513838e6b0700cf75386daa8355ddc0f09e3f7211486ee87",
+      "code_sha256": "16dc4f49c3756fdd26889cfd5a8e550edb04ad17d57ab0c5f76c95278d239817"
+    },
+    "island-768-1-1": {
+      "sha256": "72d47343723956943653c3e4ceefe664eab133341fc6123b9f7a364f2127ddf4",
+      "code_sha256": "13d3ed82f87c12cd3711131178ab8f4a501f27bfd1d56acad447bfadc75c5aa0"
+    },
+    "island-1024-1-1": {
+      "sha256": "72a7c9ac87c0a7e049a6eb8c0a5f41b458f8793ff61ed69270600bd96394dfc5",
+      "code_sha256": "87c7666d21a65f127600bddf8049090740d3aaa57c596bb733803d925deafc9f"
+    },
+    "ring-168-128": {
+      "sha256": "c097dc5a9b818a4c908f8e542b2881e80e118c3bc53c4b917a1cf075c571992f",
+      "code_sha256": "763507e4a33ec93235c84425d703bbd600b58614f82ec9074e4f723a51a32d2b"
+    },
+    "ring-224-128": {
+      "sha256": "d6534239d5f691cffe1ee043e1ca886eaff9ba31537b85e1a94b01e063757993",
+      "code_sha256": "1094dd533ae2666ae44f9dd6e8abc6a85a6428eab6d5ef164c9f88d108148658"
+    },
+    "ring-4096-128": {
+      "sha256": "54e41295f7298673f64a6726fac9a9dc76e9ed7c278f8617d7d439ae5d4369d0",
+      "code_sha256": "7173041c482556816cef6b44583b725f8eaa4ff44dffb3f2de643c17076ec588"
+    },
+    "ring-5120-128": {
+      "sha256": "9c3fdf49a70ae1c9c1389b6dd539e2233d02dd0421199f942ce33e44d811d6b3",
+      "code_sha256": "2d9daa4fea14d29d1f0aa4e8be790fd6036ebb47084234943855ef0528f3d299"
+    }
+  },
+  "15": {
+    "island-512-1-1": {
+      "sha256": "f6dc5dcce0ed35438d35f69ecf671d95f417d05893c5c8f4a545f5564534e277",
+      "code_sha256": "f8917d86664db1586d4c2ea899a4f9da62528e53716fedb121a392ddedf20082"
+    },
+    "island-768-1-1": {
+      "sha256": "9fa97b926abc4091d3fddaa68684a67ed212aca5acf585523d91383607ad4c3e",
+      "code_sha256": "9d1bf673c54eedd3285b80f68357e740f6aca94d189401cfe6d2884154d5bbc5"
+    },
+    "island-1024-1-1": {
+      "sha256": "00a6414b06ed0357fe44a42eabd02d25a0901ea815f72bbb995bb6d1895f3d9a",
+      "code_sha256": "76c2271ed3e1fa10ea6af1ea3e487495a804b2b218c9eb3494697cafee731318"
+    },
+    "ring-168-128": {
+      "sha256": "aca2145241ac9edcee0cd5682c8b4c4887fc5211391b5a977ffbd36681dd8d13",
+      "code_sha256": "b2d6db212a1f02410158d155525d5acbac21966e27375ec517ae71ac583467ca"
+    },
+    "ring-224-128": {
+      "sha256": "891febf8d0ce0b573196ad8e2e76e032c1fe27178d38c1d51150b9f5c8ed7d3a",
+      "code_sha256": "b6f8cec9959a6bab2f77d622b05f949a18ffa6b5333313689190808c89adbe01"
+    },
+    "ring-4096-128": {
+      "sha256": "4ad09acb19dc6ff4355679edec164e02be689c9ab984d7617f2d43a113e147b7",
+      "code_sha256": "18285d1cf0f968bcef1e7c0d9c5d9e401536bba12e2a5d429a984fa28aea6dc9"
+    },
+    "ring-5120-128": {
+      "sha256": "fd074ef5a3fc9dd5ed71ca8da05ec0ffa7001438f9674c19a996efbeb8e35f65",
+      "code_sha256": "6adf529c4b9667d5d535f512f60f268ae6d170c04e584c0aefbcd88b69109a02"
+    }
+  }
+}

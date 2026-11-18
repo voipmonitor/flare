@@ -1,0 +1,47 @@
+[
+  {
+    "key": "island-512-1-1",
+    "type": "island",
+    "threads": 512,
+    "push": true,
+    "scattered": true
+  },
+  {
+    "key": "island-768-1-1",
+    "type": "island",
+    "threads": 768,
+    "push": true,
+    "scattered": true
+  },
+  {
+    "key": "island-1024-1-1",
+    "type": "island",
+    "threads": 1024,
+    "push": true,
+    "scattered": true
+  },
+  {
+    "type": "ring",
+    "key": "ring-168-128",
+    "threads": 128,
+    "words": 168
+  },
+  {
+    "type": "ring",
+    "key": "ring-224-128",
+    "threads": 128,
+    "words": 224
+  },
+  {
+    "type": "ring",
+    "key": "ring-4096-128",
+    "threads": 128,
+    "words": 4096
+  },
+  {
+    "type": "ring",
+    "key": "ring-5120-128",
+    "threads": 128,
+    "words": 5120
+  }
+]

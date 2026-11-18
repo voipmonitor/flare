@@ -102,7 +102,7 @@ class PreparedRouteGather:
             self.select = dict(router_logits=self.logits, correction_bias=correction_bias,
                                output_weights=weights, output_ids=ids)
             self.plan = pcie.plan(pcie.query_from_runtime(runtime, surface="DcpAllToAll.all_gather_pair",
-                                                          call={**self.pair, "row_blocks": row_blocks}), runtime=runtime)
+                                                          call={**self.pair, "fixed_pair_rows": row_blocks}), runtime=runtime)
             self.select_plan = pcie.plan(pcie.query_from_runtime(runtime, surface="DcpAllToAll.kimi_topk16",
                                                                  call=self.select), runtime=runtime)
             requests.append(self.plan.request(name=name + "/gather", prepare_call=lambda state: PreparedCall(
