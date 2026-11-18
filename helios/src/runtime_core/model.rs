@@ -944,8 +944,10 @@ impl NativeModel {
                         let alternate_name = format!("{CONTROL_PREFIX}{name}");
                         let source = rank.names.iter().position(|n| *n == alternate_name)
                             .ok_or_else(|| invalid("resident control executable missing"))?;
-                        control[target] = Some((rank.executables[source] as usize, ordinal));
+                        control[target] = Some((rank.executables.get(source)? as usize, ordinal));
                     }
+                    session.record_references(index,control.iter().zip(&manifest.graphs)
+                        .filter(|(slot,logical)|slot.is_some_and(|(h,_)|h==logical.handle)).count());
                     manifest.benchmark_comparison = Some(RankGraphComparison::new(session.clone(), index, control));
                 }
                 manifest.offload = self.offload.binding(index);

@@ -79,6 +79,8 @@ fn pair_rank(
     candidate: &wire::RankBody,
     next_id: &mut u64,
     mirror: &BTreeSet<String>,
+    borrow: bool,
+    only: Option<&BTreeSet<String>>,
 ) -> AnyResult<(wire::RankBody, Vec<String>)> {
     if control.graphs.len() != candidate.graphs.len()
         || !candidate.functions.starts_with(&control.functions)
@@ -95,7 +97,7 @@ fn pair_rank(
     check.payloads.truncate(control.payloads.len());
     check.resources.truncate(control.resources.len());
     let mut names = Vec::new();
-    for (old, new) in control.graphs.iter().zip(&candidate.graphs) {
+    for (ordinal,(old, new)) in control.graphs.iter().zip(&candidate.graphs).enumerate() {
         if old.name != new.name || old.resource != new.resource || old.name.starts_with(PREFIX) {
             return Err("source graph names or frame indices differ".into());
         }
@@ -115,13 +117,23 @@ fn pair_rank(
         {
             return Err("candidate rewrote an underlying resource identity".into());
         }
-        let mut resource = src.clone();
-        resource.resource_id = *next_id;
-        *next_id = next_id.checked_add(1).ok_or("resource ID overflow")?;
+        if only.is_some_and(|wanted|!wanted.contains(&old.name)) {
+            paired.graphs[ordinal]=old.clone();
+            paired.resources[idx]=src.clone();
+            check.resources[idx]=src.clone();
+            continue;
+        }
         let mut graph = old.clone();
         graph.name = format!("{PREFIX}{}", old.name);
-        graph.resource = u32::try_from(paired.resources.len())?;
-        paired.resources.push(resource);
+        if borrow {
+            if src!=&candidate.resources[idx] || old!=new {return Err("borrowed reference bank requires identical source frames".into());}
+        } else {
+            let mut resource=src.clone();
+            resource.resource_id=*next_id;
+            *next_id=next_id.checked_add(1).ok_or("resource ID overflow")?;
+            graph.resource=u32::try_from(paired.resources.len())?;
+            paired.resources.push(resource);
+        }
         paired.graphs.push(graph);
         check.resources[idx] = src.clone();
         names.push(old.name.clone());
@@ -132,13 +144,16 @@ fn pair_rank(
             "allocation, peer, weight, state, execution or existing resource differs".into(),
         );
     }
+    if only.is_some_and(|wanted| wanted.len()!=names.len() || !names.iter().all(|name|wanted.contains(name))) {
+        return Err("requested graph has no distinct signed alternate".into());
+    }
     if names.is_empty() {
         return Err("no alternative speculative graph found".into());
     }
     Ok((paired, names))
 }
 
-fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path, mirror: &BTreeSet<String>) -> AnyResult<()> {
+fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path, mirror: &BTreeSet<String>, borrow: bool, only:Option<&BTreeSet<String>>) -> AnyResult<()> {
     if destination.exists() {
         return Err("package destination already exists".into());
     }
@@ -203,7 +218,7 @@ fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path, 
     package_id.update(&protection::sha256(&base.envelope));
     let mut variants = None;
     for (i, (a, b)) in original.ranks().iter().zip(verified.ranks()).enumerate() {
-        let (paired, names) = pair_rank(a, b, &mut next_id, mirror)?;
+        let (paired, names) = pair_rank(a, b, &mut next_id, mirror, borrow,only)?;
         if variants.as_ref().is_some_and(|v| *v != names) {
             return Err("alternate graph names differ between ranks".into());
         }
@@ -290,7 +305,7 @@ fn main() -> AnyResult<()> {
         }
     }
     if let [mode,source,dest,identity,names @ ..]=&args[..] {
-        if mode==Path::new("--reference-bank") {
+        if mode==Path::new("--reference-bank") || mode==Path::new("--shared-reference-bank") {
             let wanted:BTreeSet<_>=names.iter().map(|v|v.to_str().ok_or("invalid graph name").map(str::to_owned)).collect::<Result<_,_>>()?;
             if wanted.is_empty() || wanted.len()!=names.len() {return Err("specify distinct speculative graph names".into());}
             let meta=Metadata::open(source)?;
@@ -299,11 +314,18 @@ fn main() -> AnyResult<()> {
             if !wanted.iter().all(|n|n.starts_with("speculative") && v.ranks().iter().all(|r|r.graphs.iter().any(|g|&g.name==n))) {
                 return Err("requested reference-bank graph missing".into());
             }
-            return run(source,source,dest,identity,&wanted);
+            return run(source,source,dest,identity,&wanted,mode==Path::new("--shared-reference-bank"),None);
+        }
+    }
+    if let [mode,base,source,dest,identity,names @ ..]=&args[..] {
+        if mode==Path::new("--only") {
+            let wanted:BTreeSet<_>=names.iter().map(|v|v.to_str().ok_or("invalid graph name").map(str::to_owned)).collect::<Result<_,_>>()?;
+            if wanted.is_empty()||wanted.len()!=names.len(){return Err("specify distinct comparison graph names".into());}
+            return run(base,source,dest,identity,&BTreeSet::new(),false,Some(&wanted));
         }
     }
     let [control,source,dest,identity]=&args[..] else {
-        return Err("usage: kimi-paired-package CONTROL CANDIDATE OUTPUT IDENTITY | --reference-bank SOURCE OUTPUT IDENTITY GRAPH... | --check-load RESIDENT NEXT NEXT_CORE_ID IDENTITY".into());
+        return Err("usage: kimi-paired-package CONTROL CANDIDATE OUTPUT IDENTITY | --reference-bank/--shared-reference-bank SOURCE OUTPUT IDENTITY GRAPH... | --only CONTROL CANDIDATE OUTPUT IDENTITY GRAPH... | --check-load RESIDENT NEXT NEXT_CORE_ID IDENTITY".into());
     };
-    run(control,source,dest,identity,&BTreeSet::new())
+    run(control,source,dest,identity,&BTreeSet::new(),false,None)
 }

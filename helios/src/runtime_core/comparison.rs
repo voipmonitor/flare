@@ -240,10 +240,8 @@ impl super::NativeResources {
         // SAFETY: All rank fences have been observed and new submissions are blocked.
         unsafe {
             for &(idx,ctrl) in slots {
-                if self.executables[idx]!=self.executables[ctrl] {
-                    self.driver.check("cuGraphExecDestroy",(self.driver.executable_destroy)(self.executables[idx]))?;
-                    self.executables[idx]=self.executables[ctrl];
-                }
+                self.executables.retire(idx,ctrl,|handle|self.driver.check(
+                    "cuGraphExecDestroy",(self.driver.executable_destroy)(handle)))?;
             }
             while let Some(&module)=self.hot_modules.last(){
                 self.driver.check("cuModuleUnload",(self.driver.module_unload)(module))?;
@@ -299,7 +297,7 @@ impl super::NativeResources {
         })).unwrap_or_else(|_|Err(invalid("replacement graph construction panicked")));
         self.functions=frozen;
         let staged=PendingImages{modules:self.modules.split_off(m),templates:self.templates.split_off(t),
-            names:self.names.split_off(n),executables:self.executables.split_off(e)};
+            names:self.names.split_off(n),executables:self.executables.take_prepared(e)};
         if let Err(error)=result {
             if let Err(cleanup)=self.discard(staged){gate.poison();return Err(invalid(format!("replacement cleanup failed: {cleanup}; construction: {error}")));}
             return Err(error);
@@ -353,10 +351,10 @@ impl super::NativeModel {
                 // All names were checked before closing submission, and the
                 // source's graph catalogue is immutable.
                 let i=gate.names().iter().position(|n|n==&name).unwrap();
-                rank.executables[slots[i].0]=exec;
+                rank.executables.install(slots[i].0,slots[i].1,exec);
             }
             rank.hot_modules.append(&mut stage.modules);
-            bank.push(slots.iter().map(|&(idx,_)|rank.executables[idx] as usize).collect());
+            bank.push(slots.iter().map(|&(idx,_)|rank.executables.get(idx).expect("validated comparison graph") as usize).collect());
         }
         let id=plan.id;
         gate.install(id.clone(),&bank);

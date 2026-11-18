@@ -15,6 +15,7 @@ pub struct GraphComparison {
     candidate: AtomicBool,
     launches: Vec<Vec<[AtomicU64; 2]>>,
     overrides: Vec<Vec<AtomicUsize>>,
+    initial_references: Vec<AtomicUsize>,
     loaded: Mutex<Option<String>>,
     available: AtomicBool,
     gate: Mutex<Gate>,
@@ -39,7 +40,7 @@ impl GraphComparison {
             .collect();
         let overrides=(0..ranks).map(|_|(0..names.len()).map(|_|AtomicUsize::new(0)).collect()).collect();
         Arc::new(Self {
-            overrides, loaded: Mutex::new(None), available:AtomicBool::new(true), gate:Mutex::default(),
+            overrides,initial_references:(0..ranks).map(|_|AtomicUsize::new(0)).collect(), loaded: Mutex::new(None), available:AtomicBool::new(true), gate:Mutex::default(),
             names,
             candidate: AtomicBool::new(false),
             launches,
@@ -76,6 +77,8 @@ impl GraphComparison {
         *self.loaded.lock().unwrap_or_else(|e|e.into_inner())=Some(id);
         self.available.store(true,Ordering::Release);
     }
+    pub(crate) fn record_references(&self,rank:usize,n:usize){self.initial_references[rank].store(n,Ordering::Relaxed);}
+    pub(crate) fn reference_counts(&self)->Vec<usize>{self.initial_references.iter().map(|x|x.load(Ordering::Relaxed)).collect()}
     pub(crate) fn names(&self) -> &[String] {
         &self.names
     }

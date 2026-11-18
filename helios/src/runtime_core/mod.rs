@@ -9,6 +9,7 @@
 mod archive;
 mod cache_memory;
 mod comparison;
+mod graph_handles;
 pub use comparison::inspect_plan as inspect_resident_comparison_plan;
 #[cfg(test)]
 mod cooperative_tests;
@@ -99,7 +100,7 @@ pub struct NativeResources {
     hot_retained: Vec<Handle>,
     functions: HashMap<usize, Handle>,
     templates: Vec<Handle>,
-    executables: Vec<Handle>,
+    executables: graph_handles::GraphHandles,
     names: Vec<String>,
     reservations: Vec<(u64, usize)>,
     execution: Option<protobuf::wire::Execution>,
@@ -359,7 +360,7 @@ impl NativeResources {
                 hot_modules:vec![], hot_retained:vec![],
                 functions: HashMap::new(),
                 templates: vec![],
-                executables: vec![],
+                executables: graph_handles::GraphHandles::default(),
                 names: vec![],
                 reservations: vec![],
                 execution: core.execution.clone(),
@@ -794,7 +795,26 @@ impl NativeResources {
                 )?;
                 dynamic_shared.insert(function as usize, bytes as u32);
             }
+            let mut shared=HashMap::new();
             for graph in &core.graphs {
+                let Some(logical)=graph.name.strip_prefix(crate::execution::graph_comparison::CONTROL_PREFIX) else {continue};
+                let candidate=core.graphs.iter().find(|g|g.name==logical).ok_or_else(||invalid("comparison candidate missing"))?;
+                if graph.resource==candidate.resource {
+                    if (graph.flags,graph.node_count,graph.edge_count,&graph.functions)!=(candidate.flags,candidate.node_count,candidate.edge_count,&candidate.functions) {
+                        return Err(invalid("two roles of a shared graph resource differ in execution geometry"));
+                    }
+                    shared.insert(graph.name.as_str(),logical);
+                }
+            }
+            for graph in core.graphs.iter().filter(|g|!shared.contains_key(g.name.as_str()))
+                .chain(core.graphs.iter().filter(|g|shared.contains_key(g.name.as_str()))) {
+                if let Some(logical)=shared.get(graph.name.as_str()) {
+                    let candidate=self.names.iter().position(|n|n==logical).ok_or_else(||invalid("shared graph was not instantiated"))?;
+                    self.executables.append_owning_control(candidate)?;
+                    self.names.push(graph.name.clone());
+                    phase.advance(1);
+                    continue;
+                }
                 let mut handle = null_mut();
                 driver.check("cuGraphCreate", (driver.graph_create)(&mut handle, 0))?;
                 self.templates.push(handle);
@@ -1101,7 +1121,7 @@ impl NativeResources {
         GraphBundle {
             context: self.context as usize,
             device: self.device,
-            graph_execs: self.executables.iter().map(|v| *v as usize).collect(),
+            graph_execs: (0..self.executables.len()).map(|i|self.executables.get(i).expect("owned CUDA graph") as usize).collect(),
             buffers: self
                 .allocations
                 .values()
@@ -1175,9 +1195,8 @@ impl Drop for NativeResources {
                 std::mem::forget(self.driver.clone());
                 return;
             }
-            let mut destroyed=HashSet::new();
-            for executable in self.executables.iter().chain(&self.hot_retained).rev() {
-                if destroyed.insert(*executable as usize) { (self.driver.executable_destroy)(*executable); }
+            for executable in self.executables.owned().chain(self.hot_retained.iter().copied()).rev() {
+                (self.driver.executable_destroy)(executable);
             }
             for graph in self.templates.iter().rev() {
                 (self.driver.graph_destroy)(*graph);

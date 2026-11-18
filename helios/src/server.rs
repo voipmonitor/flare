@@ -455,7 +455,7 @@ impl Server {
     pub fn benchmark_graph_status(&self) -> Result<serde_json::Value> {
         let pair=self.model.metrics().scheduler_trace.benchmark_comparison.get()
             .ok_or("no resident comparison graphs were loaded")?;
-        Ok(serde_json::json!({"role": if pair.candidate() {"candidate"} else {"control"}, "candidate_available":pair.available(),"drain_confirmed":pair.healthy(),
+        Ok(serde_json::json!({"role": if pair.candidate() {"candidate"} else {"control"}, "candidate_available":pair.available(),"drain_confirmed":pair.healthy(),"initial_shared_handles_per_rank":pair.reference_counts(),
             "graphs": pair.names(), "launches": pair.counts(), "loaded_comparison":pair.loaded()}))
     }
     /// Waits for HTTP preparation and response owners after admission is paused.

@@ -68,7 +68,7 @@ impl NativeResources {
                     name: g.name.clone(),
                     kind: g.kind.as_str().try_into()?,
                     sampling_mode: g.sampling_mode.as_str().try_into()?,
-                    handle: self.executables[index] as usize,
+                    handle: self.executables.get(index)? as usize,
                     batch_capacity: size(g.batch_capacity)?,
                     token_capacity: size(g.token_capacity)?,
                     prefill_capacity: size(g.prefill_capacity)?,
@@ -91,7 +91,7 @@ impl NativeResources {
             let index = self.names.iter().position(|name| *name == graph.name)
                 .ok_or_else(|| invalid("tuning metadata references an unknown graph"))?;
             Ok(TuningGraphDescriptor {
-                name: graph.name.clone(), handle: self.executables[index] as usize,
+                name: graph.name.clone(), handle: self.executables.get(index)? as usize,
                 outputs: graph.outputs.clone(), status_buffer: graph.status_buffer.clone(),
             })
         }).collect::<Result<Vec<_>>>()?;
