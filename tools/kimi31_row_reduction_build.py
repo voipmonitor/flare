@@ -1,17 +1,18 @@
 """Build one CTA per row for TP16 reduction followed by the original residual arithmetic."""
 
+from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 import json
 from pathlib import Path
 import re
 import subprocess
-import sys
 from kimi31_residual_stripes_build import device_body
+from kimi31_dspark_release.dwarf_files import annotate
 
 
 def emit(args):
-    source,dest,digest,mode,body=args
+    source,dest,digest,mode,body,debug_sources=args
     ptx=(source/(digest+".ptx")).read_text()
     if sha256(ptx.encode()).hexdigest()!=digest:raise ValueError("residual PTX changed")
     ptx=ptx.replace(".version 9.3",".version 9.2").replace(".visible .entry _mix(",".visible .entry reduce_row_"+mode+"(")
@@ -60,6 +61,8 @@ def emit(args):
     }
 """
     ptx=ptx[:start]+"\n"+body+check+ptx[start:]
+    if debug_sources is not None:
+        ptx = annotate(ptx, debug_sources)
     path=dest/(digest+"-"+mode+".ptx");path.write_text(ptx);image=path.with_suffix(".cubin")
     result=subprocess.run(["/usr/local/cuda-13.2/bin/ptxas","-O3","-arch=sm_120a",str(path),"-o",str(image)],capture_output=True,text=True)
     if result.returncode:raise ValueError(result.stderr[:1500])
@@ -67,10 +70,18 @@ def emit(args):
 
 
 def main():
-    source,helper,dest=map(Path,sys.argv[1:4]);dest.mkdir(exist_ok=True,parents=True)
+    parser = ArgumentParser(description=__doc__)
+    for name in ("source", "helper", "dest"):
+        parser.add_argument(name, type=Path)
+    parser.add_argument("--debug-file-metadata", type=Path,
+                        help="JSON mapping of captured source paths to [timestamp, byte length]")
+    args = parser.parse_args()
+    source, helper, dest = args.source, args.helper, args.dest
+    dest.mkdir(exist_ok=True, parents=True)
+    debug_sources = json.loads(args.debug_file_metadata.read_text()) if args.debug_file_metadata else None
     code=helper.read_text();sites=json.loads((source/"sites.json").read_text());programs={}
     roles={r:device_body(code,f"row_to_{suffix}",120) for r,suffix in (("buffer","buffer"),("direct","mixture"))}
-    jobs=[(source,dest,d,r,body) for d in sorted({i["ptx"] for i in sites}) for r,body in roles.items()]
+    jobs=[(source,dest,d,r,body,debug_sources) for d in sorted({i["ptx"] for i in sites}) for r,body in roles.items()]
     with ThreadPoolExecutor(max_workers=6) as pool:
         for digest,role,item in pool.map(emit,jobs):programs.setdefault(digest,{})[role]=item
     (dest/"programs.json").write_text(json.dumps(dict(operations=sites,programs=programs,helper_sha256=sha256(helper.read_bytes()).hexdigest()),indent=2)+"\n")

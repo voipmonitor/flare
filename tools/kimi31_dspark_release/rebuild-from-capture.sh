@@ -30,7 +30,8 @@ bwrap --ro-bind / / --proc /proc --dev /dev --tmpfs /tmp --tmpfs /data \
     flare/tools/kimi31_dspark_release/choices/dspark-config.json /tmp/build/residual-source
 "$CUDA_HOME/bin/nvcc" -std=c++17 -O3 -arch=sm_120a --frandom-seed=65633 -ccbin /usr/bin/g++-13 \
     --ptx -rdc=true "$repo/tools/kimi31_row_reduction.cu" -o "$build/reduce.ptx"
-python "$repo/tools/kimi31_row_reduction_build.py" "$build/residual-source" "$build/reduce.ptx" "$build/residual-programs"
+python "$repo/tools/kimi31_row_reduction_build.py" "$build/residual-source" "$build/reduce.ptx" "$build/residual-programs" \
+    --debug-file-metadata "$tool/choices/residual-dwarf-files.json"
 python -m tools.kimi31_native_row_resources "$build/capture" "$build/residual-programs" "$tool/metadata" "$build/residual-graphs"
 python -m tools.kimi31_native_row_companions "$build/capture" "$build/residual-graphs" "$build/residual-programs" "$tool/metadata" "$build/residual-inputs"
 cargo build --release --locked --manifest-path "$repo/tools/kimi31_row_package/Cargo.toml" --target-dir "$build/publisher"

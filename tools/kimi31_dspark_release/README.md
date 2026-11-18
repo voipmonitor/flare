@@ -12,9 +12,11 @@ The release contains 1,637 files. Its PCIe parent accounts for 1,602 inherited c
 
 ## Rebuild decode fusion and the PCIe transport programs as well
 
-This route starts at the signed Ignition capture. It additionally requires the [Flare preparation environment](../../docs/model-preparation.md), including PyTorch 2.14.1+cu132, Triton 3.8.0 and NVIDIA Cutlass DSL 4.8.1. Clone both provider revisions alongside Flare. Their fixed source and ABI selections let the compiler regenerate all per-rank programs from explicit geometry.
+For the signed checkpoint tagged `kimi-k31-dspark-tp16-prefill32k-v1`, use the Flare build recipe tagged `kimi-k31-dspark-tp16-prefill32k-rebuild-v2`. This route starts at the signed Ignition capture. It additionally requires the [Flare preparation environment](../../docs/model-preparation.md), including PyTorch 2.14.1+cu132, Triton 3.8.0 and NVIDIA Cutlass DSL 4.8.1. Run the commands below from the directory containing the downloaded `kimi-hf` model folder. They place both provider revisions alongside Flare. Their fixed source and ABI selections let the compiler regenerate all per-rank programs from explicit geometry.
 
 ```bash
+git clone --branch kimi-k31-dspark-tp16-prefill32k-rebuild-v2 https://github.com/voipmonitor/flare.git flare-replay
+cd flare-replay
 git clone --branch kimi-k31-dspark-tp16-capture-v1 https://github.com/voipmonitor/flashinfer.git ../flashinfer-capture
 git clone --branch kimi-k31-dspark-tp16-prefill32k-v1 https://github.com/voipmonitor/flashinfer.git ../flashinfer-pcie
 tools/kimi31_dspark_release/rebuild-from-capture.sh \
@@ -30,6 +32,8 @@ tools/kimi31_dspark_release/rebuild-from-capture.sh \
 | Sparse record cache | Reuse 144 MiB for the live logical records of one layer | `f9577f7eab92132dd28957bb452c21a3dbb4b65eb74f409ced73171fd16b78b0` |
 | Query-row selection | Each GPU folds eight complete candidate rows, then returns the selected IDs | `f5ba77f5d9500637163cf301ed085000bbe8415c64f63a86e3597b9b2aa0617a` |
 
+The CUDA assembler normally looks up the timestamp and byte length of each source in a bare PTX `.file` directive when it builds the DWARF line table. A missing file yields zero for both fields. The recipe supplies the two recorded source entries explicitly so the hidden-row cubins match the signed originals when the capture machine's paths are absent. The executable PTX arithmetic and layout are preserved. [Recorded DWARF source attributes](choices/residual-dwarf-files.json)
+
 The fixed GPU capture command, target and draft revisions, and selection tables are in the [capture instructions](CAPTURE.md). That preparation has hardware-dependent graph addresses and creates a fresh signed capture. The signed inputs supplied with the checkpoint preserve those addresses for exact CPU replay.
 
 ## Build the serving CLI
@@ -42,5 +46,7 @@ cargo build --locked --release --manifest-path ../flare-runtime/flare-cli/Cargo.
 ```
 
 The qualified configuration is sixteen RTX PRO 6000 Blackwell Workstation GPUs, TP16/DCP16 and one active request. With one greedy output token, three distinct uncached 32,768-token prompts had a median of 2,632 input tokens/s on the native release. The same machine and executable with the PCIe parent achieved 552 input tokens/s. The nine-request coding decode median was 130.84 versus 127.77 output tokens/s. Both retained 2,304 KV pages and 116 snapshots under the default memory policy. The exact release can also be selected with `--memory-limit=-0G`.
+
+In a separate full-from-capture replay, both original debug source paths were absent during PTX assembly. All 1,637 model files matched, with 84 independently emitted files and 1,553 inherited companions.
 
 The PCIe-parent rebuild was checked by comparing all 1,637 files with the qualified serving checkpoint. The 35 independently written files matched byte for byte and the remaining files shared the parent's inodes. Modifying a rank signature caused native verification to fail before the output directory was published.
