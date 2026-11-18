@@ -68,6 +68,34 @@ def _fake_all_reduce(source, output, handle):
     pass
 
 
+_FOUR_GROUP_DEVICES = weakref.WeakKeyDictionary()
+
+
+def _four_group_options(runtime, source, output, coordinator):
+    """Pin the four-participant reduction measured on replicated Kimi verification rows."""
+    from importlib.util import find_spec
+    from b12x.comm.pcie import CollectiveConfig
+
+    geometry = {(4, 3584): 512, (4, 7168): 1024, (8, 3584): 1024}
+    threads = geometry.get(tuple(source.shape))
+    if (threads is None or coordinator is None or runtime.world_size != 16
+            or source.dtype != torch.bfloat16 or not source.is_contiguous() or not output.is_contiguous()):
+        return {}
+    if runtime not in _FOUR_GROUP_DEVICES:
+        properties = torch.cuda.get_device_properties(source.device)
+        owner = getattr(runtime, "_island_rs", None)
+        eligible = (find_spec("b12x.comm.pcie._island_parallel_push") is not None and owner is not None
+                    and owner.blocks == 64 and not owner.blocks_override and not owner.threads_override
+                    and owner.wait_nanosleep_cycles == 24
+                    and (properties.major, properties.minor, properties.multi_processor_count) == (12, 0, 188))
+        agreed = coordinator.same_on_every_rank(eligible)
+        _FOUR_GROUP_DEVICES[runtime] = eligible and agreed
+    if not _FOUR_GROUP_DEVICES[runtime] or source.data_ptr() == output.data_ptr() or not runtime._use_island_rs(source):
+        return {}
+    return dict(parallel_peer_flags=True, override=CollectiveConfig(
+        implementation="island_push", threads=threads, blocks=64, active_blocks=4))
+
+
 class PreparedAllReduce:
     """One fixed-shape reduction through an established b12x PCIe runtime.
 
@@ -116,7 +144,8 @@ class PreparedAllReduce:
         elif runtime.algorithm == "hierarchical":
             from b12x.comm.pcie._owner_preparation import prepared_call
 
-            self.plan = runtime.plan(source, out=output)
+            options = _four_group_options(runtime, source, output, coordinator)
+            self.plan = runtime.plan(source, out=output, **options)
             group = runtime.for_stream().group
 
             def prepare(state):
@@ -423,6 +452,65 @@ def _fake_all_gather(source, output, dependencies, handle):
     pass
 
 
+@torch.library.custom_op("flare::start_all_gather", mutates_args=("output",))
+def _start_all_gather(source: torch.Tensor, output: torch.Tensor, dependencies: list[torch.Tensor],
+                      handle: int, stream: int) -> None:
+    auxiliary = torch.cuda.ExternalStream(stream, device=source.device)
+    auxiliary.wait_stream(torch.cuda.current_stream(source.device))
+    with torch.cuda.stream(auxiliary):
+        _gather_columns(source, output, handle)
+
+
+@_start_all_gather.register_fake
+def _fake_start_all_gather(source, output, dependencies, handle, stream):
+    pass
+
+
+@torch.library.custom_op("flare::join_all_gather", mutates_args=("output",))
+def _join_all_gather(source: torch.Tensor, output: torch.Tensor, dependency: torch.Tensor, stream: int) -> None:
+    torch.cuda.current_stream(source.device).wait_stream(torch.cuda.ExternalStream(stream, device=source.device))
+
+
+@_join_all_gather.register_fake
+def _fake_join_all_gather(source, output, dependency, stream):
+    pass
+
+
+class ConcurrentAllGather:
+    """Overlap a prepared PCIe gather with local work, joining before channel reuse.
+
+    The join retains the source through its asynchronous read and follows a local
+    output dependency. A subsequent collective must read the joined output as a
+    dependency, keeping communication serialized through compilation.
+    """
+
+    def __init__(self, gather, *, workspace, session, parallel_plans):
+        from ignition.preparation.scratch import ScratchArena
+
+        plans = tuple(parallel_plans)
+        if gather.single or gather.roce:
+            raise ValueError("concurrent column gather requires a prepared PCIe channel")
+        if not isinstance(workspace, ScratchArena) or not workspace.overlap or not plans:
+            raise ValueError("concurrent column gather requires an overlap arena and local plans")
+        self.gather = gather
+        self.stream = workspace.auxiliary_stream
+        self.stream_handle = self.stream.cuda_stream
+        for plan in plans:
+            workspace.register_parallel(gather.plan, plan)
+        register_finalizer(session, self.validate_scratch)
+
+    def validate_scratch(self):
+        # PCIe gather scratch belongs to its persistent channel, outside the shared arena.
+        if self.gather.plan.memory_requirements().scratch_nbytes:
+            raise ValueError("concurrent column gather requires a plan without caller scratch")
+
+    def start(self, source):
+        _start_all_gather(source, self.gather.output, self.gather.dependencies,
+                          self.gather.handle, self.stream_handle)
+
+    def finish(self, source, dependency):
+        _join_all_gather(source, self.gather.output, dependency, self.stream_handle)
+        return self.gather.output
 
 
 @triton.jit

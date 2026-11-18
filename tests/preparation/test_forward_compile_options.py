@@ -143,8 +143,11 @@ def test_pool_and_compiler_entry_pass_policy_without_mutating_defaults(monkeypat
     monkeypatch.setattr(torch.cuda, 'set_device', lambda device: None)
     monkeypatch.setattr(torch, 'set_num_threads', lambda count: None)
     monkeypatch.setattr(torch, 'set_grad_enabled', lambda enabled: None)
-    monkeypatch.setattr(aot, 'aot_forward', lambda forward, *, options:
-        (observed.append(dict(options)), Artifact())[1])
+    def compile(forward, *, options, kernel_selections, algorithm_output):
+        assert kernel_selections is None and algorithm_output is None
+        observed.append(dict(options))
+        return Artifact()
+    monkeypatch.setattr(aot, 'aot_forward', compile)
     compile_pool._compile_forward(dumps(SimpleNamespace()), 'cuda:0', calls[0][2],
                                   tmp_path / 'saved.bin', 1, False)
     assert observed == [calls[0][2]]
@@ -162,7 +165,8 @@ def test_prepare_and_binding_rebuild_retain_instance_options(caches, monkeypatch
         fn = __call__
         def save_compiled_function(self, path):
             Path(path).write_bytes(b'compiled')
-    def compile(owner, *, options):
+    def compile(owner, *, options, kernel_selections, algorithm_output):
+        assert kernel_selections is None and algorithm_output is None
         observed.append(dict(options))
         return Artifact()
     monkeypatch.setattr(aot, 'aot_forward', compile)
@@ -237,7 +241,8 @@ def test_prepare_many_recompiles_a_materialized_forward_that_no_longer_binds(cac
         fn = __call__
         def save_compiled_function(self, path):
             Path(path).write_bytes(b'recompiled')
-    def compile(owner, *, options):
+    def compile(owner, *, options, kernel_selections, algorithm_output):
+        assert kernel_selections is None and algorithm_output is None
         compiled.append(dict(options))
         return Artifact()
     paths = {}

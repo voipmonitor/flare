@@ -28,10 +28,11 @@ def test_support_forward_is_neither_compiled_nor_captured(monkeypatch):
             return functions
 
     monkeypatch.setattr(capture, "ForwardCache", Cache)
+    monkeypatch.setattr(capture, "capture_stream", lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, "current_stream", lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, "stream", lambda stream: nullcontext())
     monkeypatch.setattr(capture.torch.cuda, "synchronize", lambda device: None)
-    monkeypatch.setattr(capture.torch.cuda, "CUDAGraph", lambda: "graph")
+    monkeypatch.setattr(capture.torch.cuda, "CUDAGraph", SimpleNamespace)
     monkeypatch.setattr(capture.torch.cuda, "graph", lambda *args, **kwargs: nullcontext())
     graphs, compiled = capture.capture_forwards(
         {"speculative": selected, "support": support},
@@ -39,7 +40,8 @@ def test_support_forward_is_neither_compiled_nor_captured(monkeypatch):
         session=SimpleNamespace(namespace=SimpleNamespace(to_dict=lambda: {}), capture=nullcontext),
         device="cuda:0", stream=stream, pool=None, compile_kinds=("speculative", "prefill"),
         capture_names=("speculative",))
-    assert graphs == {"speculative": "graph"}
+    assert tuple(graphs) == ("speculative",)
+    assert graphs["speculative"]._ignition_capture_stream is stream
     assert compiled == {"speculative": selected}
     assert calls == ["speculative"]
 
@@ -64,10 +66,11 @@ def test_trial_inputs_are_restored_before_warmup_and_outside_graph_capture(monke
     def forward():
         calls.append(("run", state["value"], state["capturing"]))
 
+    monkeypatch.setattr(capture, "capture_stream", lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, "current_stream", lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, "stream", lambda stream: nullcontext())
     monkeypatch.setattr(capture.torch.cuda, "synchronize", lambda device: None)
-    monkeypatch.setattr(capture.torch.cuda, "CUDAGraph", lambda: "graph")
+    monkeypatch.setattr(capture.torch.cuda, "CUDAGraph", SimpleNamespace)
     monkeypatch.setattr(capture.torch.cuda, "graph", graph_scope)
     capture.capture_forwards(dict.fromkeys(("trial", "other"), forward),
         {name: SimpleNamespace(kind="speculative") for name in ("trial", "other")},
@@ -109,10 +112,11 @@ def test_grouped_capture_compiles_one_representative_and_captures_each_owner(mon
 
     first, second = (lambda: None), (lambda: None)
     monkeypatch.setattr(capture, "ForwardCache", Cache)
+    monkeypatch.setattr(capture, "capture_stream", lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, "current_stream", lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, "stream", lambda stream: nullcontext())
     monkeypatch.setattr(capture.torch.cuda, "synchronize", lambda device: None)
-    monkeypatch.setattr(capture.torch.cuda, "CUDAGraph", lambda: "graph")
+    monkeypatch.setattr(capture.torch.cuda, "CUDAGraph", SimpleNamespace)
     monkeypatch.setattr(capture.torch.cuda, "graph", lambda *args, **kwargs: nullcontext())
     signature = signature_for_group = SimpleNamespace(kind="speculative")
     graphs, compiled = capture.capture_forwards(
@@ -121,7 +125,8 @@ def test_grouped_capture_compiles_one_representative_and_captures_each_owner(mon
         session=SimpleNamespace(namespace=SimpleNamespace(to_dict=lambda: {}), capture=nullcontext),
         device="cuda:0", stream=stream, pool=None, compile_group="shared-layer",
         before_run=lambda name: events.append(("restore", name)))
-    assert graphs == {"candidate-a": "graph", "candidate-b": "graph"}
+    assert tuple(graphs) == ("candidate-a", "candidate-b")
+    assert all(graph._ignition_capture_stream is stream for graph in graphs.values())
     assert tuple(compiled) == ("candidate-a", "candidate-b")
     assert events.count(("compiled", "shared-layer")) == 1
     assert events.count(("restore", "candidate-a")) == 3

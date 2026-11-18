@@ -392,8 +392,12 @@ from the agent blob cache, which survives package-directory eviction. A peer nee
 before sending any files; monolithic transfer retains protocol 1/2 compatibility.
 Resource classification follows actual consumers in the signed index. Missing,
 overlapping, unclassified, or incorrectly classified spans fail loading. The
-128 MiB metadata limit applies to the complete signed envelope. The package
-contains the signing-key fingerprint, not the verification key. Keys come from
+128 MiB metadata limit applies to the complete signed envelope and to each
+reconstructed rank body. Selected rank bodies may total at most 1 GiB after
+expanding their prepared-weight catalogs. This host-metadata bound accommodates
+large tensor-parallel catalogs of affine expert-weight source maps; it does not
+reserve memory or reduce the device KV cache budget. The package contains the
+signing-key fingerprint, not the verification key. Keys come from
 Helios's embedded publisher profiles or explicitly supplied profile files.
 
 The exporter writes each cubin or graph as one zstd frame at level 3.

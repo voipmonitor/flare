@@ -7,6 +7,8 @@
 import ast
 import copy
 import inspect
+import hashlib
+import json
 import pickle
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
@@ -15,6 +17,120 @@ from pathlib import Path
 import torch
 
 from .device_binding import _device_source, _freeze_tuning_winners
+
+
+def _configuration_device(device):
+    import triton
+
+    properties = torch.cuda.get_device_properties(device)
+    return dict(torch=torch.__version__, triton=triton.__version__,
+                capability=[properties.major, properties.minor], sm_count=properties.multi_processor_count)
+
+
+def configuration_key(source, original, name):
+    """Ignore only generated symbol spelling and CUDA ordinal, retaining all arithmetic and metadata."""
+    return _normalized_configuration_key(_device_source(source, original, 0), name)
+
+
+def _normalized_configuration_key(source, name):
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            node.name = "generated_kernel"
+        elif isinstance(node, ast.Name) and node.id == name:
+            node.id = "generated_kernel"
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == "kernel_name"
+                        and isinstance(value, ast.Constant) and value.value == name):
+                    value.value = "generated_kernel"
+    return hashlib.sha256(ast.unparse(tree).encode()).hexdigest()
+
+
+def write_configurations(compiled, device, path, *, coordinator=None):
+    """Persist selected launch parameters, independently of compiled cubin files."""
+    choices = InductorSelections(device)
+    records, algorithms = {}, {}
+    complete_algorithms = True
+    for bound in compiled.values():
+        if getattr(bound, "algorithm_choices", None) is None:
+            complete_algorithms = False
+        else:
+            for key, selected in bound.algorithm_choices.items():
+                if key in algorithms and algorithms[key] != selected:
+                    raise ValueError("compiled forwards selected different algorithms for an identical query")
+                algorithms[key] = selected
+        choices.register(bound)
+        for identity, instances in choices.instances.items():
+            key = choices.configuration_keys[identity]
+            for tuner in instances.values():
+                state = copy.deepcopy(vars(_selected(tuner).config))
+                if state.get("pre_hook") is not None or state.get("ir_override") is not None:
+                    raise ValueError("compiler configuration export requires source-defined kernels without hooks")
+                if key in records and records[key] != state:
+                    raise ValueError("generated kernel has conflicting selected configurations")
+                records[key] = state
+        choices.release(bound)
+    value = dict(schema=2, device=_configuration_device(device), kernels=records)
+    if coordinator is not None:
+        import torch.distributed as dist
+
+        values = [None] * len(coordinator.ranks)
+        dist.all_gather_object(values, (value, algorithms, complete_algorithms), group=coordinator.group)
+        for peer, peer_algorithms, complete in values:
+            complete_algorithms &= complete
+            if peer["device"] != value["device"]:
+                raise ValueError("compiler selection records require identical rank hardware and toolchains")
+            for identity, state in peer["kernels"].items():
+                if identity in records and records[identity] != state:
+                    raise ValueError("ranks selected different configurations for an identical generated kernel")
+                records[identity] = state
+            for key, selected in peer_algorithms.items():
+                if key in algorithms and algorithms[key] != selected:
+                    raise ValueError("ranks selected different compiler algorithms for an identical query")
+                algorithms[key] = selected
+        if dist.get_rank() != coordinator.ranks[0]:
+            return
+    with Path(path).open("x") as file:
+        file.write(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    if complete_algorithms:
+        destination = Path(path).with_name("algorithms.json")
+        encoded = json.dumps(dict(schema=1, choices=algorithms), sort_keys=True, indent=2) + "\n"
+        if destination.exists():
+            if destination.read_text() != encoded:
+                raise ValueError("compiler algorithm output already contains different choices")
+        else:
+            with destination.open("x") as file:
+                file.write(encoded)
+
+
+def _install_configuration(tuner, state, source):
+    """Compile precisely one recorded source configuration without benchmarking it."""
+    import triton
+
+    if state.get("pre_hook") is not None or state.get("ir_override") is not None:
+        raise ValueError("fixed compiler configurations cannot contain hooks or external IR")
+    config = triton.Config(state["kwargs"], num_warps=state["num_warps"],
+                           num_stages=state["num_stages"], num_ctas=state["num_ctas"],
+                           maxnreg=state.get("maxnreg"))
+    config.__dict__.update(copy.deepcopy(state))
+    existing = next((result for result in tuner.compile_results if vars(result.config) == state), None)
+    if existing is None and getattr(tuner.fn, "_hash_lock", None) is None:
+        from torch._inductor.codecache import PyCodeCache
+
+        # Portable static artifacts omit the JIT function's compiler state.
+        # Recreate it from the generated source before compiling the recorded tile.
+        module = PyCodeCache.load(source + "\n# Fixed-configuration source compilation.\n")
+        tuner.fn = getattr(module, tuner.inductor_meta["kernel_name"]).fn
+    result = tuner._precompile_config(config) if existing is None else existing
+    tuner.configs = [config]
+    tuner.compile_results = [result]
+    tuner.launchers = []
+    tuner._cached_launcher = None
+    tuner.inductor_meta = {**tuner.inductor_meta, "dynamic_scale_rblock": False,
+                          "coordinate_descent_tuning": False}
+    tuner.__dict__.pop("_could_rblock_scale", None)
+    tuner._make_launchers()
 
 
 def _selected(tuner):
@@ -99,13 +215,23 @@ def _kernel_globals(graph):
 class InductorSelections:
     """One canonical winner per exact generated kernel across a preparation catalog."""
 
-    def __init__(self, device, *, coordinator=None, lock_gpu_clocks=False):
+    def __init__(self, device, *, coordinator=None, lock_gpu_clocks=False, kernel_selections=None):
         self.device = torch.device(device)
         self.coordinator = coordinator
         self.lock_gpu_clocks = lock_gpu_clocks
         self.winners = {}
         self.instances = {}
         self.forwards = {}
+        self.configuration_keys = {}
+        self.configurations = None
+        self.configuration_schema = None
+        if kernel_selections is not None:
+            path = Path(kernel_selections) / "inductor.json"
+            value = json.loads(path.read_text())
+            if value.get("schema") not in (1, 2) or value.get("device") != _configuration_device(device):
+                raise ValueError(f"fixed compiler selections do not match the toolchain/device: {path}")
+            self.configurations = value["kernels"]
+            self.configuration_schema = value["schema"]
 
     def _gather(self, value):
         if self.coordinator is None:
@@ -122,6 +248,7 @@ class InductorSelections:
             raise RuntimeError(f"Inductor preparation failed across ranks: {failures}")
 
     def register(self, bound):
+        """Bind generated kernels and return their already-parsed source by symbol name."""
         from torch._inductor.async_compile import CompiledTritonKernels
         from torch._inductor.runtime.triton_heuristics import CachingAutotuner
 
@@ -131,7 +258,7 @@ class InductorSelections:
         entries = ({} if graph._triton_bundle is None else
                    {entry.cache_key: entry for entry in graph._triton_bundle.static_autotuners})
         module = _kernel_globals(graph) if entries else {}
-        bindings = {}
+        bindings, sources = {}, {}
         for node in ast.walk(ast.parse(graph.source_code)):
             if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
                     and ast.unparse(node.value.func) == 'async_compile.triton'):
@@ -141,6 +268,7 @@ class InductorSelections:
             source = ast.literal_eval(node.value.args[1])
             cache_key = CompiledTritonKernels.key(source)
             name = node.targets[0].id
+            sources[name] = source
             tuner = module.get(name)
             if not isinstance(tuner, CachingAutotuner) or cache_key not in entries:
                 kind = f'{type(tuner).__module__}.{type(tuner).__qualname__}'
@@ -148,17 +276,26 @@ class InductorSelections:
                     f'generated Inductor kernel {name!r} in graph {graph.cache_key} lacks its static '
                     f'autotuner binding: live_type={kind}, source_key={cache_key}, '
                     f'bundled={cache_key in entries}, static_entries={len(entries)}')
-            identity = CompiledTritonKernels.key(_device_source(source, original, 0))
+            normalized = _device_source(source, original, 0)
+            identity = CompiledTritonKernels.key(normalized)
+            key = _normalized_configuration_key(normalized, tuner.inductor_meta["kernel_name"])
+            self.configuration_keys[identity] = key
             bindings[cache_key] = identity, entries[cache_key], tuner
             instances = self.instances.setdefault(identity, {})
             if id(tuner) not in instances:
                 instances[id(tuner)] = tuner
                 if identity in self.winners:
                     _install(tuner, self.winners[identity])
+                elif self.configurations is not None:
+                    lookup = key if self.configuration_schema == 2 else identity
+                    if lookup not in self.configurations:
+                        raise LookupError(f"fixed compiler configuration missing for generated kernel {name}: {lookup}")
+                    _install_configuration(tuner, self.configurations[lookup], source)
         # Epilogue-fusion benchmarking bundles template candidates that final code never names.
         if any(entries[key].kernel_name in graph.source_code for key in set(entries) - set(bindings)):
             raise ValueError("compiled forward has unbound static Inductor kernels")
         self.forwards[id(bound)] = backend, graph, bindings
+        return sources
 
     @contextmanager
     def _tuning(self, bindings, *, frozen):
@@ -232,7 +369,8 @@ class InductorSelections:
             variants[variant] = identities
         failure = None
         try:
-            with warmup(), self._tuning(bindings, frozen=self.forwards[id(bound)][0]._tuning_frozen):
+            with warmup(), self._tuning(bindings, frozen=(self.configurations is not None
+                                                       or self.forwards[id(bound)][0]._tuning_frozen)):
                 if before_run is not None:
                     before_run()
                 bound()

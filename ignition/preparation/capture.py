@@ -12,6 +12,7 @@ import torch
 from ignition.progress import graph_catalog, phase
 
 from .aot import ForwardCache
+from .capture_stream import capture_stream
 from .compilation import _defer_full_collection
 from .startup_tuning import capture_consumers
 
@@ -46,12 +47,27 @@ def capture_forwards(functions, signatures, *, session, device, stream, pool,
     if compile_group is not None and (not isinstance(compile_group, str) or not compile_group
                                       or compile_group in functions or not compile_decoder or not names):
         raise ValueError("grouped compilation requires a distinct name and selected compiled forwards")
+    if names:
+        # PyTorch recycles pooled stream handles. Resetting an unrelated graph
+        # on the same handle clears cuBLAS workspaces embedded in live graphs.
+        # One catalog owns this stream until all of its graph objects are gone.
+        supplied_stream, stream = stream, capture_stream(device)
+        stream.wait_stream(supplied_stream)
+        if before_run is not None:
+            restore_inputs = before_run
+
+            def before_run(name):
+                restore_inputs(name)
+                stream.wait_stream(supplied_stream)
+
     graphs, compiled = {}, {}
     warmup = nullcontext if warmup_storage is None else warmup_storage.transient
     if compile_decoder:
         cache = ForwardCache(namespace=session.namespace.to_dict(), device=device, root=cache_root,
                              headroom_bytes=getattr(session, "headroom_bytes", 0),
                              compile_workers=getattr(session, "requested_compile_workers", None),
+                             kernel_selections=getattr(session, "compiler_selections", None),
+                             record_kernel_selections=getattr(session, "record_kernel_selections", None),
                              lock_gpu_clocks=getattr(session, "lock_gpu_clocks", False) and session.autotune)
         forwards = {name: function for name, function in functions.items()
                     if name in names and signatures[name].kind in compile_kinds}
@@ -119,6 +135,7 @@ def capture_forwards(functions, signatures, *, session, device, stream, pool,
             started = monotonic()
             stream.wait_stream(torch.cuda.current_stream(device))
             graph = torch.cuda.CUDAGraph(keep_graph=True) if retain_graphs else torch.cuda.CUDAGraph()
+            graph._ignition_capture_stream = stream
             communication = nullcontext() if collective is None else collective.capture(stream=stream)
             def memory_detail():
                 free, total = torch.cuda.mem_get_info(device)

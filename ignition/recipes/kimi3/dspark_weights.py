@@ -29,11 +29,12 @@ class DraftWeights:
 
     ``projection`` holds this rank's rows of the auxiliary-state combination, gathered across ranks;
     ``context_kv`` stacks every layer's key and value rows, so accepted target states reach all draft
-    caches through one projection. The embedding is column-sharded like the target's. The output head
-    is the target's when the checkpoint's head is identical, and the Markov transition keeps its
-    embedding replicated while its projection is vocabulary-sharded like the head. A plan storing
-    online MXFP8 holds the combination, attention outputs and MLPs as MXFP8; queries, keys, values,
-    the embedding and the Markov transition keep the checkpoint's BF16.
+    caches through one projection. The embedding is column-sharded like the target's. Checkpoint
+    vocabulary tensors are optional because some drafts share both target tensors. The Markov transition
+    keeps its embedding replicated; its projection is vocabulary-sharded unless `replicated_markov` selects
+    the fused single-request sampler. A plan storing
+    online MXFP8 holds the combination, QKV, context K/V, attention outputs and MLPs as MXFP8;
+    embeddings, normalization and the Markov transition keep the checkpoint's BF16 unless separately converted.
     """
 
     projection: torch.Tensor
@@ -47,7 +48,8 @@ class DraftWeights:
     layers: tuple[DraftLayerWeights, ...]
 
     @classmethod
-    def load(cls, snapshot, config, device, shard, *, target_head, progress=None, online_mxfp8=False):
+    def load(cls, snapshot, config, device, shard, *, target_embedding=None, target_head, progress=None,
+             online_mxfp8=False, replicated_markov=False):
         from ignition.components.weights import quantize_bf16_linear_as_mxfp8 as mxfp8_rows
 
         stored = mxfp8_rows if online_mxfp8 else lambda weight: weight
@@ -77,7 +79,7 @@ class DraftWeights:
                 prefix = f"layers.{index}"
                 key = matrix(prefix + ".self_attn.k_proj", rows=kv_rows)
                 value = matrix(prefix + ".self_attn.v_proj", rows=kv_rows)
-                qkv = torch.cat((matrix(prefix + ".self_attn.q_proj", rows=q_rows), key, value))
+                qkv = stored(torch.cat((matrix(prefix + ".self_attn.q_proj", rows=q_rows), key, value)))
                 context.extend((key, value))
                 output = stored(matrix(prefix + ".self_attn.o_proj", columns=q_rows))
                 query_norm, key_norm, input_norm, post_norm = loader.load_tensors(tuple(prefix + name for name in
@@ -87,13 +89,25 @@ class DraftWeights:
                                                    for name in ("gate_proj", "up_proj")])),
                                  stored(matrix(prefix + ".mlp.down_proj", columns=intermediate)))
                 layers.append(DraftLayerWeights(qkv, output, query_norm, key_norm, input_norm, post_norm, mlp))
-            embedding = matrix("embed_tokens", columns=shard.partition(hidden, alignment=64))
-            head = matrix("lm_head", rows=vocabulary)
-            # Kimi K3's DSpark draft reuses the target's output head; keep a copy only for drafts that differ.
-            head = None if torch.equal(head, target_head) else head
+            hidden_rows = shard.partition(hidden, alignment=64)
+            embedding = target_embedding
+            if "embed_tokens.weight" in manifest.tensors:
+                embedding = matrix("embed_tokens", columns=hidden_rows)
+            if embedding is None or embedding.dtype != torch.bfloat16 \
+                    or tuple(embedding.shape) != (config.vocabulary, hidden_rows[1] - hidden_rows[0]):
+                raise ValueError("DSpark requires a compatible checkpoint or target embedding")
+            head = None
+            if "lm_head.weight" in manifest.tensors:
+                head = matrix("lm_head", rows=vocabulary)
+                head = None if torch.equal(head, target_head) else head
+            if head is None:
+                expected = (vocabulary[1] - vocabulary[0], hidden)
+                if target_head is None or target_head.dtype != torch.bfloat16 \
+                        or tuple(target_head.shape) != expected:
+                    raise ValueError("DSpark requires a compatible target vocabulary head")
             markov_embedding = matrix("markov_head.markov_w1")
-            markov_head = matrix("markov_head.markov_w2", rows=vocabulary)
+            markov_head = matrix("markov_head.markov_w2", rows=None if replicated_markov else vocabulary)
             if markov_embedding.shape[1] != d.markov_rank or markov_head.shape[1] != d.markov_rank:
                 raise ValueError("DSpark Markov projections disagree with markov_rank")
-        return cls(projection, hidden_norm, torch.cat(context), norm, embedding, head, markov_embedding,
+        return cls(projection, hidden_norm, stored(torch.cat(context)), norm, embedding, head, markov_embedding,
                    markov_head, tuple(layers))

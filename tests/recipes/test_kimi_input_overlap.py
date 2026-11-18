@@ -104,6 +104,7 @@ def test_projection_and_shared_forks_preserve_outputs_and_balance_joins(
 
     prepared.router_projection, prepared.down = router_projection, down
     prepared.route_gather = route if compact else None
+    prepared.prefill_route_gather = None
     prepared.concurrent_down = (ProjectionFork(events, down) if compact and projection_overlap else None)
     prepared.experts, prepared.expert_reduce, prepared.up = experts, reduce, up
     if not compact:

@@ -1254,7 +1254,7 @@ class DirectWeightLoader:
                          weight_name="weight", activation="silu", w13_layout="w13", shared_columns=None,
                          global_scale_name="weight_scale_2", global_scale_kind="multiplier",
                          input_scale_name=None, activation_outer_scale="expert",
-                         swiglu_alpha=None, swiglu_beta=None, a4_prefill=None):
+                         swiglu_alpha=None, swiglu_beta=None, a4_prefill=None, weight_packing=None):
         """Prepare NVFP4 or MXFP4 experts, optionally compressing their block scales.
 
         The first two projection names fill the first and second w13 halves in that
@@ -1263,6 +1263,8 @@ class DirectWeightLoader:
         those buffers; overlapping calls must not. With ``shared_columns``, each
         expert's down projection, whose intermediate columns partition across ranks,
         is read once per host (``SharedColumnReads``).
+        ``weight_packing`` constrains the physical b12x layout without changing
+        quantized values; ``None`` retains the provider's layout selection.
         """
         import torch
         from b12x.moe import fused_moe as moe
@@ -1408,7 +1410,8 @@ class DirectWeightLoader:
                                           swiglu_clamp_after_silu=swiglu_clamp_after_silu,
                                           **activation_options),
             geometry=moe.MoEGeometry(num_experts=count, hidden_size=hidden_size, intermediate_size=local),
-            constraints=moe.WeightPlanConstraints(scale_compression=scale_compression))
+            constraints=moe.WeightPlanConstraints(required_packing=weight_packing,
+                                                  scale_compression=scale_compression))
         gains = {} if not device_scales else dict(w13_global_scales=device_scales[0], w2_global_scales=device_scales[1])
         if (activation_mode == "a4" or a4_prefill) and activation_outer_scale == "expert":
             gains.update(input_scale=device_scales[2], intermediate_scale=device_scales[3], immutable_input_scales=True)
@@ -1480,7 +1483,7 @@ class DirectWeightLoader:
         self, prefixes, *, hidden_size, intermediate_size, scale_scratch,
         intermediate_range=None, swiglu_limit=None,
         projection_names=("gate_proj", "up_proj", "down_proj"), scale_name="weight_scale",
-        weight_name="weight", activation="silu", activation_mode="a8",
+        weight_name="weight", activation="silu", activation_mode="a8", weight_packing=None,
     ):
         """Keep lossless MXFP4 scales compressed and expand into shared native scratch.
 
@@ -1488,6 +1491,8 @@ class DirectWeightLoader:
         scale scratch between serialized expert layers, retaining both buffers
         until every captured graph using those layers has drained. Activations
         are quantized to MXFP8 (``a8``) or kept in BF16 (``a16``).
+        ``weight_packing`` may require a specific b12x physical weight layout;
+        ``None`` retains the provider's selection.
         """
         import torch
         from b12x.moe import fused_moe as moe
@@ -1535,7 +1540,8 @@ class DirectWeightLoader:
             source=moe.PackedSource(format="fp4_e8m0_k32", w13_layout="w31"),
             activation=moe.ActivationSpec(mode=activation_mode, nonlinearity=activation, io_dtype=torch.bfloat16,
                                           swiglu_limit=swiglu_limit),
-            geometry=moe.MoEGeometry(num_experts=count, hidden_size=hidden_size, intermediate_size=local))
+            geometry=moe.MoEGeometry(num_experts=count, hidden_size=hidden_size, intermediate_size=local),
+            constraints=moe.WeightPlanConstraints(required_packing=weight_packing))
         prepared = moe.prepare_weights(plan=plan, weights=moe.Mxfp4CsfWeights(
             w13=w13, w2=w2, w13_scales=scales13, w2_scales=scales2,
             w13_scale_scratch=scale_scratch[0], w2_scale_scratch=scale_scratch[1]))

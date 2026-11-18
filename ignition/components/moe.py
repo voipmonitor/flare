@@ -115,7 +115,7 @@ class PreparedRoutedExperts:
 
     def __init__(self, source, experts, ids, weights, output, *, session: PreparationSession, name: str,
                  workspace: ScratchArena | torch.Tensor | None = None, router_plan=None,
-                 a4_prefill=False, routing=None, router=None, route_output=None):
+                 a4_prefill=False, routing=None, router=None, route_output=None, decode_config=None):
         # b12x owns the final weight/scale planes after repacking. Classify those
         # exact tensors, not opaque execution scratch or the discarded source.
         for field in ("w1_fp4", "w2_fp4", "w1_blockscale", "w2_blockscale",
@@ -177,7 +177,7 @@ class PreparedRoutedExperts:
                 max_tokens=source.shape[0], top_k=ids.shape[1],
                 route_num_experts=experts.num_experts if self.route_inputs else 0,
                 output_layout="routes" if output.ndim == 3 else "token"),
-            scale_expansion=self.scale_plan, invocation=invocation, routing=routing,
+            scale_expansion=self.scale_plan, invocation=invocation, routing=routing, override=decode_config,
         )
 
         def prepare_call(state):

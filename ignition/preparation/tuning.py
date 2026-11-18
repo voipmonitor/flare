@@ -85,7 +85,8 @@ class RecordedPreparationSession(PreparationSession):
     def __init__(self, *, device, checkpoint: str, workload_schema: str,
                  numerical_policy: str, search_limits=None, namespace=None, race_budget=None,
                  coordinator=None, headroom_bytes=0, benchmark_storage=None, compile_workers=None,
-                 tuning_replica=None, autotune_effort="default", collective_tuning="static", collective_ladder=None, native_dense_activations=False, lock_gpu_clocks=False):
+                 tuning_replica=None, autotune_effort="default", collective_tuning="static", collective_ladder=None, native_dense_activations=False, lock_gpu_clocks=False,
+                 kernel_selections=None, compiler_selections=None, record_kernel_selections=None):
         if not isinstance(checkpoint, str) or not checkpoint:
             raise ValueError("tuning requires an exact checkpoint revision")
         if any(not isinstance(value, str) or not value for value in (workload_schema, numerical_policy)):
@@ -107,6 +108,8 @@ class RecordedPreparationSession(PreparationSession):
         identity.update(checkpoint=checkpoint, workload_schema=workload_schema,
                         numerical_policy=numerical_policy)
         self.autotune_effort = AutotuneEffort(autotune_effort).value
+        if kernel_selections is not None and self.autotune_effort == "off":
+            raise ValueError("fixed kernel selections require default or audit effort, matching their recorded identity")
         self.native_dense_activations = native_dense_activations
         self.lock_gpu_clocks = lock_gpu_clocks
         _prepare_compiler_toolchain()
@@ -114,6 +117,15 @@ class RecordedPreparationSession(PreparationSession):
             super().__init__(device=device, autotune=self.autotune_effort != "off", compile_workers=0,
                              namespace=identity, race_budget=race_budget, prime=False,
                              collective_barrier=None if coordinator is None else coordinator.barrier)
+        if kernel_selections is not None:
+            from b12x.preparation._cache import cache_identity
+            from .kernel_selections import FixedSelectionCache
+
+            self._cache = FixedSelectionCache(kernel_selections, cache_identity(
+                self.namespace.to_dict(), self.device.ordinal, cache_policy=self.cache_policy))
+        self.kernel_selections = kernel_selections
+        self.compiler_selections = compiler_selections
+        self.record_kernel_selections = record_kernel_selections
         if type(headroom_bytes) is not int or headroom_bytes < 0:
             raise ValueError("headroom_bytes must be a nonnegative byte count")
         self.headroom_bytes = headroom_bytes
@@ -590,6 +602,7 @@ class RecordedPreparationSession(PreparationSession):
             self.tuning_report = {
                 "workload_schema": self._workload_schema, "namespace": self.namespace.to_dict(),
                 "autotune_effort": self.autotune_effort,
+                "kernel_selections": None if self.kernel_selections is None else str(self.kernel_selections),
                 "collective_tuning": self.collective_tuning,
                 "collective_ladder": self.collective_ladder,
                 "native_dense_activations": self.native_dense_activations,

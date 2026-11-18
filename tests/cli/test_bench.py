@@ -16,6 +16,25 @@ def settings(*flags):
     return Settings.from_args(_parser().parse_args(["bench", *flags]))
 
 
+@pytest.mark.parametrize("command", ["bench", "export"])
+def test_kernel_choice_files_are_explicit_preparation_inputs(tmp_path, command):
+    parsed = _parser().parse_args([command, "kimi-k3.1-pro",
+        "--kernel-selections", str(tmp_path / "b12x"),
+        "--compiler-selections", str(tmp_path / "compiler"),
+        "--record-kernel-selections", str(tmp_path / "recorded")])
+    assert parsed.kernel_selections == tmp_path / "b12x"
+    assert parsed.compiler_selections == tmp_path / "compiler"
+    assert parsed.record_kernel_selections == tmp_path / "recorded"
+
+
+def test_resident_mode_keeps_explicit_measurement_geometry(tmp_path):
+    parsed = _parser().parse_args(["bench", "kimi-k3.1-pro", "--resident", str(tmp_path / "session"),
+                                   "--batches", "1", "--contexts", "512", "--seeds", "17"])
+    value = Settings.from_args(parsed)
+    assert parsed.resident == tmp_path / "session"
+    assert (value.batches, value.contexts, value.seeds) == ((1,), (512,), (17,))
+
+
 def test_default_matrix_and_measurement_counts():
     value = settings()
     assert value.batches == (1, 2, 4)

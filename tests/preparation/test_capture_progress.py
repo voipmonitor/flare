@@ -15,10 +15,11 @@ from ignition.preparation.execution import GraphSignature
 @pytest.fixture
 def capture_options(monkeypatch):
     stream = SimpleNamespace(wait_stream=lambda other: None, synchronize=lambda: None)
+    monkeypatch.setattr(capture, "capture_stream", lambda device: stream)
     for name, value in {
         "current_stream": lambda device: stream,
         "stream": lambda stream: nullcontext(),
-        "CUDAGraph": lambda **options: object(),
+        "CUDAGraph": lambda **options: SimpleNamespace(),
         "graph": lambda *args, **options: nullcontext(),
         "synchronize": lambda device: None,
         "mem_get_info": lambda device: (1024, 2048),

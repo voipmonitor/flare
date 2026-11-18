@@ -205,6 +205,7 @@ def _lending_rank(rank, world, store, root, outcome, lifecycle=None, fail_shutdo
         cache.root, cache.device, cache.headroom_bytes, cache.options = root, "cpu", 0, aot.MappingProxyType({})
         cache.compile_workers = None
         cache.lock_gpu_clocks = False
+        cache.kernel_selections, cache.record_choices = None, False
         variant = "sample" if rank == 0 else "consume"
         functions = {name: _Forward(variant) for name in "abcd"}
         coordinator = SimpleNamespace(group=dist.group.WORLD, ranks=tuple(range(world)), spans_hosts=False,
@@ -292,7 +293,7 @@ def test_compiler_shutdown_failure_is_reported_to_every_rank(tmp_path):
                 process.join(timeout=30)
 
 
-def _cached_rank(rank, world, store, root, deferred, outcome):
+def _cached_rank(rank, world, store, root, deferred, outcome, promoted_cycles=False):
     import gc
     import weakref
     from contextlib import nullcontext
@@ -300,18 +301,29 @@ def _cached_rank(rank, world, store, root, deferred, outcome):
 
     import torch.distributed as dist
 
-    from ignition.preparation import aot, compile_pool
+    from ignition.preparation import aot, compile_pool, host_memory
 
+    gc_enabled = gc.isenabled()
     try:
+        if promoted_cycles:
+            gc.disable()
+            host_memory.available_bytes = lambda: 2 * host_memory._HEADROOM_BYTES
         compile_pool.CompilePool = _Pool
         _replace_gpu_preparation()
-        restored, portable, warmed = [], [], []
+        restored, portable, warmed, cycles = [], [], [], []
 
         def load(self, forward, path, required=False, before_run=None):
-            if required:
+            if required and not promoted_cycles:
                 gc.collect()
                 assert all(reference() is None for reference in portable), "previous portable artifact is retained"
+            if required and promoted_cycles and cycles:
+                assert cycles[-1]() is not None, "a full heap collection ran between cached forwards"
             artifact = _Artifact(warmed.append)
+            if required and promoted_cycles:
+                graph = artifact._artifacts.compiler_graph
+                graph.cycle = graph
+                cycles.append(weakref.ref(graph))
+                gc.collect(1)
             bound = aot.BoundForward(artifact, forward, True)
             if not required:
                 restored.append(weakref.ref(bound))
@@ -329,6 +341,7 @@ def _cached_rank(rank, world, store, root, deferred, outcome):
         cache.root, cache.device, cache.headroom_bytes, cache.options = root, "cpu", 0, aot.MappingProxyType({})
         cache.compile_workers = None
         cache.lock_gpu_clocks = False
+        cache.kernel_selections, cache.record_choices = None, False
         functions = {name: _Forward("shared") for name in "abcd"}
         signatures = {name: name for name in functions}
         for name, forward in functions.items():
@@ -341,8 +354,10 @@ def _cached_rank(rank, world, store, root, deferred, outcome):
         assert set(warmed) == set(functions.values())
         assert all(warmed.count(forward) == 2 for forward in functions.values())
         assert all(bound.cache_hit for bound in selected.values())
-        gc.collect()
+        if not promoted_cycles:
+            gc.collect()
         assert all(reference() is None for reference in portable)
+        assert all(reference() is None for reference in cycles), "phase boundary retained promoted compiler cycles"
         for bound in selected.values():
             assert bound.prepare_capture() == 0
             bound()
@@ -359,6 +374,9 @@ def _cached_rank(rank, world, store, root, deferred, outcome):
         import traceback
 
         outcome.put((rank, traceback.format_exc()))
+    finally:
+        if promoted_cycles and gc_enabled:
+            gc.enable()
 
 
 @pytest.mark.parametrize("deferred", [False, True])
@@ -376,3 +394,25 @@ def test_cached_catalog_releases_restoration_owners_before_rebinding(tmp_path, d
         process.join(timeout=60)
         assert process.exitcode == 0
     assert results == {rank: list("abcd") for rank in range(3)}
+
+
+def test_cached_catalog_collects_promoted_cycles_at_phase_boundary(tmp_path):
+    context = multiprocessing.get_context("fork")
+    root = tmp_path / "forwards"
+    root.mkdir()
+    outcome = context.Queue()
+    processes = [context.Process(target=_cached_rank,
+        args=(rank, 3, tmp_path / "store", root, True, outcome, True)) for rank in range(3)]
+    try:
+        for process in processes:
+            process.start()
+        results = dict(outcome.get(timeout=120) for _ in processes)
+        for process in processes:
+            process.join(timeout=60)
+            assert process.exitcode == 0
+        assert results == {rank: list("abcd") for rank in range(3)}
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=30)

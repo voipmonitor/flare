@@ -204,3 +204,32 @@ def test_b12x_offline_worker_installs_triton_fix_before_first_job():
                 "platform_key.__module__, __import__('torch').cuda.is_initialized())",)).get(timeout=120)
             assert result == ("ignition.runtime_patches.triton", False)
     ''')
+
+
+@pytest.mark.parametrize("preinstalled", [False, True])
+def test_b12x_spawn_initializer_handles_preinstalled_patches(tmp_path, preinstalled):
+    source = '''
+        from ignition import runtime_patches
+        from b12x._lib.compile_pool import CompilePool
+
+        PREINSTALL
+
+        if __name__ == "__main__":
+            runtime_patches.apply()
+            pool = CompilePool(device_ordinal=3, compute_capability=(12, 0), device_uuid="patch-test",
+                product_name="NVIDIA RTX PRO 6000 Blackwell", sm_count=188,
+                max_shared_memory_per_block=101376, max_shared_memory_per_multiprocessor=102400,
+                workers=1)
+            try:
+                result = pool._pool.apply_async(eval, (
+                    "(__import__('triton.runtime.build', fromlist=['platform_key']).platform_key.__module__,"
+                    " __import__('torch').cuda.is_initialized(), __import__('torch').cuda.current_device(),"
+                    " __import__('torch').cuda.get_device_properties().multi_processor_count)",
+                )).get(timeout=15)
+                assert result == ("ignition.runtime_patches.triton", False, 3, 188)
+            finally:
+                pool.close(terminate=True)
+    '''
+    script = tmp_path / "worker_bootstrap.py"
+    script.write_text(textwrap.dedent(source).replace("PREINSTALL", "runtime_patches.apply()" if preinstalled else "pass"))
+    subprocess.run([sys.executable, str(script)], check=True, timeout=60)

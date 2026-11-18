@@ -283,11 +283,12 @@ def measurement_result(cases, measurements, *, warmup, repetitions, seeds, statu
     return result
 
 
-def run_benchmark(prepared, tokenizer, *, scenarios, warmup=5, repetitions=20, seeds=(0, 1, 2), progress=None):
+def run_benchmark(prepared, tokenizer, *, scenarios, warmup=5, repetitions=20, seeds=(0, 1, 2), progress=None,
+                  executor=None):
     """Measure captured graphs at a real prefix, restoring state before every replay."""
     from ignition.direct.scheduler import Layout
 
-    model = getattr(prepared, "model", prepared)
+    model = getattr(prepared, "model", prepared) if executor is None else executor.model
     cases, seeds = tuple(scenarios), tuple(seeds)
     if not cases or not seeds or warmup < 1 or repetitions < 1:
         raise ValueError("benchmark needs cases, seeds, positive warmup and positive repetitions")
@@ -307,7 +308,7 @@ def run_benchmark(prepared, tokenizer, *, scenarios, warmup=5, repetitions=20, s
         _round_shape = ("speculative", case.batch, case.width, case.packed_tokens)
         if sum(shape[:4] == _round_shape for shape in layout.packed_shapes) != 1:
             raise ValueError(f"benchmark case has no unique prepared round: {case}")
-    runner = BenchmarkExecutor(prepared)
+    runner = BenchmarkExecutor(prepared) if executor is None else executor
     measurements = [[] for _ in cases]
 
     def result(status, failure=None):
@@ -352,5 +353,6 @@ def run_benchmark(prepared, tokenizer, *, scenarios, warmup=5, repetitions=20, s
                 error.add_note(f"could not save incomplete benchmark measurements: {output_error}")
         raise
     finally:
-        runner.close()
+        if executor is None:
+            runner.close()
     return result("complete")

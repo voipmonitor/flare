@@ -13,6 +13,7 @@ from ignition.components.weights import (DirectWeightLoader, SharedColumnReads, 
                                          quantize_bf16_linear_as_mxfp8)
 
 from .config import DSparkConfig, ModelConfig
+from .expert_profile import weight_packing
 from .residual import score_weight
 
 PREFIX = "language_model.model"
@@ -36,15 +37,17 @@ class ModelWeights:
 
     @classmethod
     def load(cls, manifest, device, *, shard, progress=None, draft_checkpoint=None, online_mxfp8=False,
-             peers=None, vision=True):
+             online_mxfp8_scope="all", draft_head_quantization=None, markov_head_quantization=None,
+             replicated_markov=False, peers=None, vision=True):
         """``peers``, a host's Gloo group and peer storage, reads column-sharded projections once per host.
 
         ``draft_checkpoint`` loads the target model's DSpark checkpoint.
         Without ``vision``, the vision encoder stays on disk.
         """
         before = torch.cuda.memory_allocated(device)
-        with KimiWeightLoader(manifest, device, shard=shard, progress=progress, online_mxfp8=online_mxfp8,
-                              peers=peers) as loader:
+        with KimiWeightLoader(manifest, device, shard=shard, progress=progress,
+                              online_mxfp8=online_mxfp8 and online_mxfp8_scope != "draft",
+                              online_mxfp8_scope=online_mxfp8_scope, peers=peers) as loader:
             config = loader.config
             embedding = loader.linear(f"{PREFIX}.embed_tokens", columns=shard.partition(config.hidden, alignment=64))
             norm, res_norm, res_proj = loader.load_tensors(tuple(f"{PREFIX}.{n}.weight" for n in
@@ -59,30 +62,58 @@ class ModelWeights:
             vision = None
         draft = None
         if draft_checkpoint is not None:
-            if config.dsa is None:
-                from .dspark_weights import DraftWeights
-
-                draft_config, draft_args = DSparkConfig, {}
-            else:
+            draft_config = DSparkConfig
+            if config.dsa is not None:
                 from ignition.recipes.kimi31.dspark_config import DSparkConfig as draft_config
-                from ignition.recipes.kimi31.dspark_weights import DraftWeights
-
-                draft_args = dict(target_embedding=embedding)
             config = replace(config, draft=draft_config.load(draft_checkpoint, config))
-            draft = DraftWeights.load(draft_checkpoint, config, device, shard, target_head=head, progress=progress,
-                                      online_mxfp8=online_mxfp8, **draft_args)
+            if config.draft.window is None:
+                from ignition.recipes.kimi31.dspark_weights import DraftWeights
+                if replicated_markov:
+                    raise ValueError("replicated Markov requires the Qwen sliding-window DSpark")
+                draft_options = {}
+            else:
+                from .dspark_weights import DraftWeights
+                draft_options = {"replicated_markov": replicated_markov}
+            draft = DraftWeights.load(draft_checkpoint, config, device, shard, target_embedding=embedding,
+                                      target_head=head, progress=progress,
+                                      online_mxfp8=online_mxfp8 and online_mxfp8_scope in ("all", "draft"),
+                                      **draft_options)
+            draft = _prepare_draft_heads(draft, head, draft_head_quantization=draft_head_quantization,
+                                         markov_head_quantization=markov_head_quantization)
         return cls(config, shard, embedding, norm, head, score_weight(res_norm, res_proj), layers,
                    loader.scale_scratch, torch.cuda.memory_allocated(device) - before, vision=vision, draft=draft)
 
 
+def _prepare_draft_heads(draft, target_head, *, draft_head_quantization=None, markov_head_quantization=None):
+    if draft_head_quantization is not None:
+        from ignition.components.vocabulary import mxfp8_draft_head, nvfp4_draft_head
+
+        if draft_head_quantization == "nvfp4":
+            draft = replace(draft, head=nvfp4_draft_head(target_head))
+        elif draft_head_quantization == "mxfp8":
+            draft = replace(draft, head=mxfp8_draft_head(target_head))
+        else:
+            raise ValueError(f"unsupported draft head quantization: {draft_head_quantization}")
+    if markov_head_quantization is not None:
+        from ignition.components.markov_sampling import fp8_markov_head
+
+        if markov_head_quantization != "fp8":
+            raise ValueError(f"unsupported Markov head quantization: {markov_head_quantization}")
+        draft = replace(draft, markov_head=fp8_markov_head(draft.markov_head))
+    return draft
+
+
 class KimiWeightLoader(DirectWeightLoader):
-    def __init__(self, manifest, device, *, shard, progress=None, prefixes=None, online_mxfp8=False, peers=None):
+    def __init__(self, manifest, device, *, shard, progress=None, prefixes=None, online_mxfp8=False,
+                 online_mxfp8_scope="all", peers=None):
+        if online_mxfp8_scope not in ("all", "kda-input", "draft"):
+            raise ValueError("online MXFP8 scope must be all, kda-input or draft")
         super().__init__(manifest, device, prefixes=prefixes, progress=progress)
         self.peers, self.shared_columns = peers, None
         self.config, self.shard = ModelConfig.load(manifest.snapshot), shard
-        # Online conversion stores attention, shared-expert, and latent projections as E4M3 values
-        # with E8M0 block-32 scales; their activations stay BF16.
+        # Scope selects stored E4M3 weights with E8M0 block-32 scales; activations stay BF16.
         self.online_mxfp8 = online_mxfp8
+        self.online_mxfp8_scope = online_mxfp8_scope
         self.config.validate_shard(shard)
         self.scale_scratch = None
 
@@ -193,7 +224,9 @@ class KimiWeightLoader(DirectWeightLoader):
                 attention["indexer.k_norm." + key] = self.load_tensor(name)
         attention["output"] = self.linear(a + ".o_proj", columns=head_rows)
         if self.online_mxfp8:
-            for key in ("input", "forget", "latent_gate", "q_b", "output"):
+            keys = (("input", "forget", "latent_gate", "q_b", "output") if self.online_mxfp8_scope == "all"
+                    else (("input",) if self.config.layers[index] == "kda" else ()))
+            for key in keys:
                 if key in attention:
                     attention[key] = quantize_bf16_linear_as_mxfp8(attention[key])
         return attention
@@ -212,7 +245,7 @@ class KimiWeightLoader(DirectWeightLoader):
             return result
         m = prefix + ".block_sparse_moe"
         result["shared"] = self.mlp(m + ".shared_experts", c["num_shared_experts"] * c["moe_intermediate_size"],
-                                    online_mxfp8=self.online_mxfp8)
+                                    online_mxfp8=self.online_mxfp8 and self.online_mxfp8_scope == "all")
         result["router"] = self.linear(m + ".gate", rows=shard.partition(c["num_experts"], alignment=8))
         result["correction"] = self.load_tensor(m + ".gate.e_score_correction_bias")
         result["latent_down"] = self.linear(m + ".routed_expert_down_proj", columns=shard.partition(c["hidden_size"]))
@@ -220,7 +253,7 @@ class KimiWeightLoader(DirectWeightLoader):
         result["latent_down_rows"] = self.linear(m + ".routed_expert_down_proj",
                                                  rows=shard.partition(c["routed_expert_hidden_size"]))
         result["latent_up"] = self.linear(m + ".routed_expert_up_proj", columns=shard.partition(c["routed_expert_hidden_size"]))
-        if self.online_mxfp8:
+        if self.online_mxfp8 and self.online_mxfp8_scope == "all":
             for key in ("latent_down", "latent_down_rows", "latent_up"):
                 result[key] = quantize_bf16_linear_as_mxfp8(result[key])
         # Each rank applies the latent norm's weights to the columns its up-projection shard reads.
@@ -231,6 +264,8 @@ class KimiWeightLoader(DirectWeightLoader):
         if len(formats) != 1 or not formats <= {"mxfp4", "mxfp4_csf"}:
             raise ValueError(f"{m}: expert storage disagrees with quantization configuration")
         hidden, intermediate = c["routed_expert_hidden_size"], c["moe_intermediate_size"] // shard.world_size
+        packing = weight_packing(experts=c["num_experts"], hidden=hidden, intermediate=intermediate,
+                                 world_size=shard.world_size, device=self.device)
         if self.scale_scratch is None:
             def buffer(rows, columns):
                 return torch.empty((c["num_experts"], (rows + 255) // 256 * 256,
@@ -244,10 +279,11 @@ class KimiWeightLoader(DirectWeightLoader):
                 intermediate_range=shard.partition(c["moe_intermediate_size"], alignment=32),
                 projection_names=("w1", "w3", "w2"), weight_name="weight_packed", activation="situ",
                 w13_layout="w31", scale_compression="csf", scale_scratch=self.scale_scratch,
-                shared_columns=self._shared_reads())
+                shared_columns=self._shared_reads(), weight_packing=packing)
             return result
         result["experts"] = self.load_mxfp4_csf_experts(prefixes, hidden_size=hidden,
             intermediate_size=c["moe_intermediate_size"], intermediate_range=shard.partition(c["moe_intermediate_size"], alignment=32),
             projection_names=("w1", "w3", "w2"), weight_name="weight_packed",
-            activation="situ", activation_mode=EXPERT_ACTIVATION, scale_scratch=self.scale_scratch)
+            activation="situ", activation_mode=EXPERT_ACTIVATION, scale_scratch=self.scale_scratch,
+            weight_packing=packing)
         return result

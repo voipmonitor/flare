@@ -25,7 +25,8 @@ _DISCRETE_WORKER_DEVICE_BYTES = 1 << 30
 
 
 @_defer_full_collection()
-def _compile_forward(payload, device, options, path, num_threads, grad_enabled):
+def _compile_forward(payload, device, options, path, num_threads, grad_enabled,
+                     kernel_selections=None, record_choices=False):
     runtime_patches.apply()
     from .aot import aot_forward
     from .device_binding import bind_device
@@ -37,8 +38,9 @@ def _compile_forward(payload, device, options, path, num_threads, grad_enabled):
     # A lent forward's metadata names its owner's GPU; it loads bound to this worker's.
     with bind_device(device):
         forward = loads(payload)
-    artifact = aot_forward(forward, options=options)
     path = Path(path)
+    artifact = aot_forward(forward, options=options, kernel_selections=kernel_selections,
+        algorithm_output=path.with_suffix('.algorithms.json') if record_choices else None)
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(dir=path.parent, suffix='.tmp', delete=False) as file:
         temporary = Path(file.name)
@@ -50,10 +52,12 @@ def _compile_forward(payload, device, options, path, num_threads, grad_enabled):
 
 
 class CompilePool:
-    def __init__(self, device, *, headroom_bytes=0, pools=1, options=None, compile_workers=None):
+    def __init__(self, device, *, headroom_bytes=0, pools=1, options=None, compile_workers=None,
+                 kernel_selections=None, record_choices=False):
         """Size workers for `device`, beside `pools - 1` other ranks' pools compiling on this host."""
         self.device = torch.device(device)
         self.pool = None
+        self.kernel_selections, self.record_choices = kernel_selections, record_choices
         options = dict(_OPTIONS if options is None else options)
         if type(headroom_bytes) is not int or headroom_bytes < 0:
             raise ValueError("headroom_bytes must be a nonnegative byte count")
@@ -101,7 +105,8 @@ class CompilePool:
             else:
                 self.pool = SubprocPool(self.workers, kind=SubprocKind.SPAWN)
         return self.pool.submit(_compile_forward, payload, self.device, self.options, str(path),
-                                torch.get_num_threads(), torch.is_grad_enabled())
+                                torch.get_num_threads(), torch.is_grad_enabled(),
+                                self.kernel_selections, self.record_choices)
 
     def __enter__(self):
         return self

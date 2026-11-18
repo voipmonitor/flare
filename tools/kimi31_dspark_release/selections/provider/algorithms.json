@@ -1,0 +1,33 @@
+{
+  "choices": {
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 1, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 1, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 1024, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 1024, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 128, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 128, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 1536, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 1536, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 2, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 2, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 2048, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 2048, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 256, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 256, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 3, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 3, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 4, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 4, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 5, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 5, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 512, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "triton:4268a4dd28cb2b9e3934918b65c1d5fee8c6704c063c8e67778b8f02a63bfaeb",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 512, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 6, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 6, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 7, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 7, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 8, 128, 192, 1152, 1, 0), ('cuda', 'torch.bfloat16', 6, 128, 512, 65536, 512, 1, 0)]\",\"highest\"]": "triton:96774510972bd5ddcb462b683e0f8c381dfea8987ee578aa8de0dc0f42b150e9",
+    "[\"bmm\",\"[('cuda', 'torch.bfloat16', 6, 8, 512, 512, 3072, 1, 0), ('cuda', 'torch.bfloat16', 6, 512, 128, 65536, 128, 1, 0)]\",\"highest\"]": "bmm-cd5psz4hpk4zkst35kaqy4cinkar3isguqbvs5d5ipyx2iqstqib"
+  },
+  "schema": 1
+}

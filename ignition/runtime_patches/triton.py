@@ -21,10 +21,15 @@ def replacements():
 
 
 def initialize_b12x_worker(*args):
-    from b12x._lib.compile_pool import _initialize_worker
+    from b12x._lib import compile_pool
 
     from . import apply_triton
 
-    # b12x uses spawn, so this process imports its original initializer.
+    # A spawn entry module may install all patches before the pool invokes its
+    # initializer. Resolve the preserved entrypoint in that case, rather than
+    # calling this wrapper through the dependency's replaced module attribute.
+    initializer = getattr(compile_pool, "_flare_unwrapped_initialize_worker", compile_pool._initialize_worker)
+    if initializer is initialize_b12x_worker:
+        raise RuntimeError("b12x compiler worker lacks its unwrapped initializer")
     apply_triton()
-    _initialize_worker(*args)
+    initializer(*args)

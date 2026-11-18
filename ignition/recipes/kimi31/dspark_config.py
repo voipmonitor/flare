@@ -9,8 +9,8 @@ from pathlib import Path
 
 from ignition.components.parallel import TensorParallelShard
 
-DSPARK_REPOSITORY = "Inferact/Kimi-K3.1-Pro-DSpark-preview"
-DSPARK_REVISION = "6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94"
+DSPARK_REPOSITORY = "Inferact/Kimi-K3.1-Pro-DSpark"
+DSPARK_REVISION = "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,16 @@ class DSparkConfig:
     def from_dict(cls, raw, target):
         if not isinstance(raw, dict) or not isinstance(target, dict):
             raise ValueError("Kimi K3.1 DSpark requires draft and target configuration objects")
+        if raw.get("architectures") == ["DSparkDraftModel"]:
+            speculators = raw.get("speculators_config")
+            verifier = speculators.get("verifier") if isinstance(speculators, dict) else None
+            if not isinstance(verifier, dict) or verifier.get("architectures") != ["KimiK31ForConditionalGeneration"]:
+                raise ValueError("Kimi K3.1 DSpark requires a KimiK31ForConditionalGeneration verifier")
+            if raw.get("full_attention_causal") is not True or raw.get("block_size") != 7 \
+                    or raw.get("dtype") != "bfloat16":
+                raise ValueError("unsupported Kimi K3.1 Qwen DSpark semantics")
+            from ignition.recipes.kimi3.config import DSparkConfig as QwenDSparkConfig
+            return QwenDSparkConfig.from_dict(raw, target)
         expected = dict(architectures=["K3DSparkModel"], model_type="k3_dspark",
             hidden_act="silu", hidden_size=7168, intermediate_size=14336,
             num_hidden_layers=5, num_attention_heads=96, num_key_value_heads=96,

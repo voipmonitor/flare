@@ -47,6 +47,7 @@ def capture_rank(rank, world, store, warmed, finished, outcome):
                 assert all(finished[peer * 2] for peer in range(world))
 
         stream = SimpleNamespace(wait_stream=lambda other: None, synchronize=lambda: None)
+        capture.capture_stream = lambda device: stream
         capture.torch.cuda.current_stream = lambda device: stream
         capture.torch.cuda.stream = lambda stream: nullcontext()
         capture.torch.cuda.synchronize = lambda device: None

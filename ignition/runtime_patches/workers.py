@@ -30,7 +30,9 @@ def replacements():
 
     from .triton import initialize_b12x_worker
 
+    initializer = getattr(compile_pool, "_flare_unwrapped_initialize_worker", compile_pool._initialize_worker)
     return (
+        (compile_pool, "_flare_unwrapped_initialize_worker", initializer),
         (compile_pool, "_initialize_worker", initialize_b12x_worker),
         (subproc_pool, "SubprocPickler", CompilerPickler),
         (utils, "_async_compile_initializer", initialize_inductor_worker),

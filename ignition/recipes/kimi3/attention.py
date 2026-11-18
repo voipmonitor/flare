@@ -22,6 +22,8 @@ from ignition.components.dense_mla import PreparedDenseMLA
 from .config import PAGE_TOKENS
 from .dcp import RECORD_BYTES, ContextShards, pull_context, write_records
 from .pointwise import rms_norm_columns, sigmoid_gate
+from .absorbed_query import assemble_query
+from .latent_unpack import select_unpack
 from .projections import prepare_projection
 
 FP8 = torch.float8_e4m3fn
@@ -60,6 +62,7 @@ class PreparedMLAProjection:
         # latents, as vLLM's VLLM_KIMI_SHARD_QKV_A does: every rank keeps and reads a sixteenth of the latent
         # projection. A single rank (``latents`` None) projects every latent row itself.
         self.latent_gather = None
+        self.latent_unpack = None
         local_width = (weights["latent_gate"].shape[0] if isinstance(weights["latent_gate"], torch.Tensor)
                        else weights["latent_gate"].out_features)
         if latents is None:
@@ -77,13 +80,15 @@ class PreparedMLAProjection:
             self.gathered_latents = buffer("gathered_latents", latents.world_size * width, rows=rows)
             self.latent_gather = PreparedChunkedAllGather(self.send, self.gathered_latents, runtime=latents,
                 session=session, coordinator=coordinator, name=name + ".gather_latents")
+            self.latent_unpack = select_unpack(source, mode=mode, query_width=latent_width - RECORD_BYTES,
+                                               world=latents.world_size, shard_width=width)
         self.projections = {key: prepare_projection(x, weights[key], y, session=session,
             name=name + "." + key, workspace=workspace)
             for key, x, y in (("latent_gate", source, self.local), ("q_b", self.query_norm, self.query.view(tokens, -1)),
                              ("output", self.expanded, buffer("output", hidden)))}
         self.buffer = buffer
 
-    def project(self, source):
+    def project(self, source, *, quantized=None):
         p = self.projections
         p["latent_gate"](source)
         if self.latent_gather is not None:
@@ -92,20 +97,28 @@ class PreparedMLAProjection:
                 self.send.copy_(self.local[:, :width])
             self.latent_gather(self.send)
             # Rank-major latent shards back into the query and KV latents they partition.
-            world = self.gathered_latents.shape[1] // width
-            gathered = self.gathered_latents.view(tokens, world, width)
-            query = self.input.shape[1] - RECORD_BYTES
-            q, kv = query // world, RECORD_BYTES // world
-            self.input[:, :query].view(tokens, world, q).copy_(gathered[:, :, :q])
-            self.input[:, query:].view(tokens, world, kv).copy_(gathered[:, :, q:q + kv])
+            if self.latent_unpack is not None:
+                self.latent_unpack(self.gathered_latents, self.input, self.latent[:, 512:])
+            else:
+                world = self.gathered_latents.shape[1] // width
+                gathered = self.gathered_latents.view(tokens, world, width)
+                query = self.input.shape[1] - RECORD_BYTES
+                q, kv = query // world, RECORD_BYTES // world
+                self.input[:, :query].view(tokens, world, q).copy_(gathered[:, :, :q])
+                self.input[:, query:].view(tokens, world, kv).copy_(gathered[:, :, q:q + kv])
         rms_norm_columns(self.input[:, :-RECORD_BYTES], self.weights["query_norm"], self.query_norm, self.eps)
         rms_norm_columns(self.input[:, -RECORD_BYTES:-64], self.weights["kv_norm"], self.latent[:, :512], self.eps)
-        self.latent[:, 512:].copy_(self.input[:, -64:])
+        if self.latent_unpack is None:
+            self.latent[:, 512:].copy_(self.input[:, -64:])
         p["q_b"](self.query_norm)
         if self.rotary is not None:
             self.rotary(self.query[:, :, 128:], self.latent[:, 512:], self.metadata.positions)
-        self.absorbed[:, :, :512].copy_(torch.bmm(self.query[:, :, :128].transpose(0, 1), self.weights["key"]).transpose(0, 1))
-        self.absorbed[:, :, 512:].copy_(self.query[:, :, 128:])
+        projected = torch.bmm(self.query[:, :, :128].transpose(0, 1), self.weights["key"])
+        if quantized is None:
+            self.absorbed[:, :, :512].copy_(projected.transpose(0, 1))
+            self.absorbed[:, :, 512:].copy_(self.query[:, :, 128:])
+        else:
+            assemble_query(projected, self.query, self.absorbed, quantized)
         return self.absorbed
 
     def finish(self):

@@ -5,8 +5,8 @@
 
 Each rank projects its rows of the routed-expert down projection and its experts' router logits.
 One b12x exchange gathers both shards; a single decode row also selects Kimi's 16 experts inside
-that exchange, and two to eight rows select them with b12x's prepared top-16 afterwards. This
-replaces the router all-gather, the separate top-k, and the latent all-reduce of the general path.
+that exchange. Seven and eight rows on TP16 SM120 use packed byte transport through the
+existing recursive gather, followed by the same prepared top-16 selection.
 """
 
 import itertools
@@ -20,6 +20,11 @@ from ignition.preparation.tuning import declare
 MAX_ROWS = 8
 _OWNERS = weakref.WeakValueDictionary()
 _HANDLES = itertools.count()
+
+
+def packed_route_geometry(rows, world, capability, multiprocessors):
+    """Select the measured row band within b12x's recursive-gather hardware contract."""
+    return 7 <= rows <= MAX_ROWS and world == 16 and capability == (12, 0) and multiprocessors >= 64
 
 
 def create_route_runtime(group, device, *, ipc=None):
@@ -43,7 +48,7 @@ class PreparedRouteGather:
     """
 
     def __init__(self, local_down, local_router, correction_bias, latent, weights, ids, *, runtime, session,
-                 coordinator, name):
+                 coordinator, name, workspace=None):
         import torch.distributed as dist
         from b12x.comm import pcie
 
@@ -59,6 +64,27 @@ class PreparedRouteGather:
         self.runtime, self.rows = runtime, rows
         self.local_down, self.local_router, self.correction_bias = local_down, local_router, correction_bias
         self.latent, self.weights, self.ids = latent, weights, ids
+        self.packed, self.scratch_nbytes = None, 0
+        row_blocks = False
+        if rows > 1 and workspace is not None:
+            properties = torch.cuda.get_device_properties(local_down.device)
+            eligible = packed_route_geometry(rows, world, (properties.major, properties.minor), properties.multi_processor_count)
+            # All ranks must execute the same transport, including groups whose
+            # devices do not have identical hardware capabilities.
+            row_blocks = (rows == 4 and world == 16 and (properties.major, properties.minor) == (12, 0)
+                          and properties.multi_processor_count == 188 and runtime._threads_override in (0, 512))
+            agreed = coordinator is not None and coordinator.same_on_every_rank((eligible, row_blocks))
+            row_blocks = row_blocks and agreed
+            if eligible and agreed:
+                from .packed_routing import PreparedPackedRouteGather
+
+                self.logits = torch.zeros((rows, 896), dtype=torch.float32, device=latent.device)
+                self.packed = PreparedPackedRouteGather(local_down, local_router, correction_bias, latent,
+                    self.logits, weights, ids, runtime=runtime, workspace=workspace, session=session,
+                    coordinator=coordinator, name=name)
+                self.plan, self.select_plan = self.packed.plan, self.packed.select_plan
+                self.scratch_nbytes = self.packed.scratch_nbytes
+                return
         ranks = tuple(dist.get_process_group_ranks(runtime.exchange_group))
         requests = []
         if rows == 1:
@@ -76,7 +102,7 @@ class PreparedRouteGather:
             self.select = dict(router_logits=self.logits, correction_bias=correction_bias,
                                output_weights=weights, output_ids=ids)
             self.plan = pcie.plan(pcie.query_from_runtime(runtime, surface="DcpAllToAll.all_gather_pair",
-                                                          call=self.pair), runtime=runtime)
+                                                          call={**self.pair, "row_blocks": row_blocks}), runtime=runtime)
             self.select_plan = pcie.plan(pcie.query_from_runtime(runtime, surface="DcpAllToAll.kimi_topk16",
                                                                  call=self.select), runtime=runtime)
             requests.append(self.plan.request(name=name + "/gather", prepare_call=lambda state: PreparedCall(
@@ -89,6 +115,8 @@ class PreparedRouteGather:
         _OWNERS[self.handle] = self
 
     def __call__(self):
+        if getattr(self, 'packed', None) is not None:
+            return self.packed()
         _route_gather(self.local_down, self.local_router, self.latent, self.weights, self.ids, self.handle)
         return self.latent
 

@@ -192,6 +192,7 @@ def test_forward_cache_load_requests_its_compile_time_contract(tmp_path, monkeyp
     monkeypatch.setattr("ignition.preparation.aot.release_unused", lambda **_: None)
     cache = ForwardCache.__new__(ForwardCache)
     cache.device = torch.device("cuda", 0)
+    cache.record_choices = False
     for frozen in (False, True):
         cache.options = {"triton.autotune_at_compile_time": frozen}
         assert cache._load(owner, path).cache_hit

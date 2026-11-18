@@ -1,0 +1,6140 @@
+{
+  "device": {
+    "capability": [
+      12,
+      0
+    ],
+    "sm_count": 188,
+    "torch": "2.14.1+cu132",
+    "triton": "3.8.0"
+  },
+  "kernels": {
+    "0043383ce14f1b5a7f41008e5d708c0dfdf5dfc5cc6b5153835d96da37e4ea0f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "00851615ce83e7b968bd20abb0ec717ade83bb451dbd013cd77a8a6f5b5b1a29": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "00f235a816315e5cf3a6fdeaf6de7b9a31e81519e67a020f349135a6e2944ee8": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "020845a30e74b7e42515a72aa1e5c02dadfad0b1f0c44561319b8c8937beda49": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "02228c7d798ebc2ac236e430066a724c842facea17296c58ca3536782a6f4ed4": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "02a14d99122ce1777369f099b1b3609cef87196beced3524294f42af1e743331": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "033e2a1487d251b1416eea6f784e8cad302f8a5a3e83672592709f4b4cb090bf": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "033e9b03b6088fce4a0c1530c24725cc81ab54ca70bf313e1b5318d689e389d0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "0377a7536ce15696ac9a376b9a1001e1c6ea18ba0b20403d992c762d242e6243": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 64
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0386c7c82207c2c4933349889e6ab3e37303d5f439711d545227f76ef7e0d21b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "04953b51b0a7fd1df2106f07a812ca192fe87ccddd63a9a1614512151419a187": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "049f29c6acbf1ae22b83dbd5db246e68beda19e3f29b2e42323856a559464b42": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "04db978fdfeac95de62f721710ce8650cbeb3712be257ad4255324d11e341884": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "05e4212e189fabeeb23036d695f2273e9a20dd616328342f2556426f99065786": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "067f0780e4362676596d29f4eec4bc5888c858ee97e546ed1393bfb9a2f03bfa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "0693a2fe250dba3a88d3c2f4b37203580fc93589d6f906e5d2b7fbac19b6274d": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "06b0258fb0d70bd60a9ea32df994b568f66c99da332a1b6f593e31f7e80ae5ea": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "076faea760360e506d6526e2eb6566e78074387a8949891842fd13a5b94889f7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "07e8c6e9d79e4bcf1bc3426e492d17b8bee75d2453342ecb488e7c5f6d6691ad": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "08857491e22541ca3e8f07fadc99743f277a4501c5997a14c9eacd7909f2048f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "088ac981e173a07ad23131530f28560cf4551e198585c041666f73091efa2047": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "091b01e9f480c1d5d1584027c9038b2b13f9991a8d4a1d08f4d5c96a7e9701a1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "091e59d071a85dfe13d8c3d782814c4ff33aeb677c5872f2e88b72b6686b5af3": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "0b148b08a46dbb2fe1714d0ec27b3bc9f9ac61219d5e43835564542ef56eed91": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "0b1b0292b6a8588243be3c6cfa25f88e48a0d9933e202f5207128b0547009c3e": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0b6be7b00ebc7eb8c0f771e5e6d42302f8a5ab84f7ddd3030ff5fff943fafbcd": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0c488010b891eaa9b715998c06f02f19ad3c368d7f1f081e1328ac3c7f3609b3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "0e2958cdb7987b26d8101e02f96f0399978c171071a6f920a2d4bec6191322a3": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0e677209a3ffae536a7b2cfdf7c6bd72622d1e47d09da6eb9e65930fbc274bd5": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0ea302055ce1ac775968b89ef73c7118c8595fd6959cb8e928aaa5ca1179a15e": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0ee82bad12e0579727040783d0839108073b4872d2039b8d4a0ae5f54edccbaf": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "0fcd73d4aad5c7ed3285fe7b3a51e19c8a7e9448231aafd9eae43e3ff4eb92cf": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1098d93471972cca72728527aa031bd4493df86912366c1dc9add87635e5a179": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "1285c335979b40a189382e08862b43f211344471cd8d2ccb8881993f85b31471": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "12a31717b7b6cde0d42ad0dadfbef10fe03372977ed7fda8c7b737f2901e28cd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1396b5449acbe8e3cd1da7a9b4c7df450da8bc81fb050f856b1262c8d49fcf98": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1447eedabbf00c40d024f20a97ef0e21fc990765676a327ba12a3bec6f721eb0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "144cafa519076101af55d59eb215bac4bab8a605489454b0a64ebc479ffa0b23": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1621bfd134120aa93685f3964cad2a8f743336af4ef4b6cc8ead9bccf29c5264": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "169f499dd6a97dc8fd3580ecd1d0eec784a60781212fab69ed1e6afb7a8f6940": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "16b216a6e42beb93b73c7188b1738704e7a77107800c5e0fd61fa866caf3987f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "16d1876282a3979d396cbda1e2d448b19b656451c1ae785b0e80a928f60405ad": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "17500014ea18c999ff4394bdef19b43cb555e447c62a018cd1d7261f4a4436ec": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "185a72bb8ea293a717262afb2661fc671b4c90755425fa55d80150c29f24e6da": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "186fbc58e01777c7b8159c4f780c50091c28d2d6e34f4a0edf81a8c2a7e5cfb4": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "188d304b6e70cac13f11721b962b920407d7d44449e78e09ea17eb8b4e73bb23": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "197d40a7bd2e69d0cdaeffb2ff42be356437ca63d04907deeeb0179bcff90937": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "19a886a97acea07fa96b1d84021f67fb9966a3e4a2a760b8e34e76fbab82a6de": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1a41a660b9447299fa85e9fd36d5c711b0c370ddc284986d810fd1540b2408b1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1a69abe7bd4b216d66ed829b60915b1315fce1735e4c1cfb89918b4ffeac13b7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "1aeda240e139068f7c4c5c19430013c1c761599a8c34c6d8631fc1ebe05361f6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1b0483ac65d92872cd8cb8154196f2732e78aac662c1714efea8deae54e62fb2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1b4e6ee20e67212b084eccbab562e6bba070229853b599509abda3b660593063": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "1b7fb5a70e3f0b4724d0b166c4386d87eecbb2fb203d7081410460047e44a10d": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "1bb091e964f1d56ec730eb6bbd4e1735b703d4a7566dbd89ac2b34095893a3f4": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1bc22dd4a9151fb9d3dbccf4911a1bd2b173119ba85c98333f2ded307ab989fc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 32
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "1c3af69f6d72d35f6da91017e2a68b2619f3b59a1c93ff7f8d3b3d99238ea9e1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1c452e6c3180c077e7a6de37c0ddaf1b7d9721f6767075db25b16d93c773f5d5": {
+      "ir_override": null,
+      "kwargs": {
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1ce4150eef6d7914359da9f6d29c442aa1daf9710052766995b7888a21f7384f": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "1d00debefa2e14bcfe6084ed377ad228f5e7a45b50128eb79fafb52c50be158f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "1ddbe8c27adf06b7e48d6ae94422a868fd987ed368b312603f270519600d347b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "1ed2b2154228ee8b0cfb1b01c6cce7138b1835fe6563b92ab06ac95bcb10bbfa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "1f40018b07058a4bd14c411f0b40dd9089f5333e6f2445fa03d1cbf8c292a901": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "1fb87d4862b26da4cd427d137acf382645bf521a0ff2f9845a6c8cb031a15da5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "1fc986e9bf0293787932acdf28d421e52e1c26c2b2e881b4e4f104ee42069092": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "2026ad96a7705fa4c4c4740a8037c13a94aff51b04f92473777e14b0a21a6ebb": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "2037992c4f8341763fb8ec8fe709a38b400cdb9aec0827b141c5ff921cc7db47": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "206d01353c525c8f1cb4f7986430ea68a85dfabc6aabd7446922a7274ccd2c1c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "21714046b0066ffafb12cad454f6762ae32a4533a7717e4ab1bc55f800ea2b03": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "21a1171dcee6b6322eb67158e23c0cea145f75282b3a7705764db065fba4a560": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "21f5fd2a60132b1738090d502e9384a93fe6c715dfeafcb05b3e0b4803d5da3e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "22aaa800424bdb4f138e92b5b8b8470ca755658faf14f49531ade64ddc256e38": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "22ab13e2245d6fdf5d2b6b57e558fc02c4c152c5d4cff778203e9790f7f91e67": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "232f43de523f9f2f0c0748739470dc3c238b132b1a9843a64b8f5fd4aea91e29": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "236d7328854bbad728a39e69e6993a558b6f9ceda20e945a8abd4544a10e6289": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "23a3019b34c1bee8d4954499bab857f61c134db3f7fa22729fa0bcd8585f9de3": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "25018f21c378dba64ddcb71a5a443f69d134167b61c197a4f9f1e330806fe219": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "251da127b06a65da60195bc708c04f6258896fa993037f6765e673d2d1d0c022": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "25a14671ab5b759dafdd6d2e3bfc5df928a640784774ef010d4756e794eb4369": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "25eeb6ed14eaee321e29325ef9afa1b2de1ec2a02dcd4a09c1ae976d33b54f9e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "260bd9d47c36c38168241ce6545481631644ab077b15bd10fbf47f8b98938b31": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "261d58a4a164aca6d33592e0b3a8ff7a8734896b518a27cb240ea4122f940ec6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "26279183439213b2a6242b7ac77bff4828400180558555adb35539ca4aa3f2da": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "266a5549a000aa2a6532cb04bbc3444ffe3da2870826d0e62fd15f5fd7c4f7a1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "26d66fb409badbc3f0a435d2aac8d64b7b64e39e42cab3914240a457e332260d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "26ebfaf877afa2193e689ad63987a6760c9103f66bffbba310b8fd242046cf12": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "28ca267114bf0f082fd395cde1a2d6c48b8f99b911fa2b2e9d975e271506b041": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "298b662d2655a5c1b8232123001ec71b14d43d283131743a1f983f1432d6de4a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "29a4dbc4927f7c0ffcaa58c82c9d10c0a995ee84935b50efbab3431df256e435": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "29ce9eef5621ce45b46ceec5b4f00b5ad977536b73fa6129c78b29bd0f1ee43e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "2a5e8f6af57e5eb92010cf1422009f73b4decdd1bfc327f790b0f85bce2dd94d": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "2b56119a79e3ceabb41ad1f023d07caf8e3b0302861edd337c6ef41ac873e46a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "2b6f8def91857572bf9b07702e3e203da085d9f03b4227ac6afa5a76de4843c4": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "2d125625855b7f069342e2e10dd4e5be2e9f5b047e821b2451d8cb146dca2295": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "2e2e8ea230b30ba3dfa29df6fee121da64150da2e16c00e017b08a2baf3b09bb": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "2e95b624f42fb3dd6a988685ee16ad3a80cf3af56c409a083faff8e1f82a6783": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "2edfdfb02fded423a15a13c211b66e603496f31cd430c9affb8ff00a3767914d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "2f0c0cd826f7c14a84e5e0aa77d4e2164fd634c1793580784757a611374a0421": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "2f7aff0deef596277eaf87faf3ddafea88ed6ffb8d7afed07b3d554450229c05": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "2f833535c1b07cf2c879b289ea633a0530ed0f45616e7cdfae80b84a65e93313": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "2f9a1a19bf13c2749c24ad77ab17c89720c825b5b09f23b19e96c61b7d2e0d3e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "2fa43830262b1c30cc779f7f395707df010284de22d23729eae0cc3be4caa64d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "303533d73dcbfad8cb7528f786e50626fbe3b64afc63987ff051b9776e9a8cec": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "31f7ce139750854b828f177e6da8a61f1e03433fe264ec2f72031d28b787e477": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "327e26f1d5a8214399f3b827a919a84fc5f2673c2a93b68449e531a670ebba77": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "335e4bd8232b43305f46d94cf248a4d71b6a86de9192ce21174e7b4b71dfc428": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3370b9cd0ca7794dbf68a699d924a79550e173b51be04f8b8b89f351b07b33a1": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "34bedb85b42c998451def06dd34ac15de93a91789fea34f8657f189f870f9571": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3518384782460a3c78156535e9e9227bce2d0477ed0634d4493203a8292c2fd4": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3554bf2699c67b514f2a06f320770ee360dec7fbbd451c9a3ae2153546bd78a6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "35e9983ec6e533587a536a4f1d7f83af0b6e85fe0141a3a8af7738c36469ef99": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "366107d07243d11d1561e0d3be02af14b25bc1e82db1023acc063eb6bdfffa3b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "366e83f80e4f6ed6ac1a779ceaddda2afa581f97b17cfd6494492a7473a0d459": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "36c8aaf009e65cc0ec963f38b196b1023a423c9fa1437e2a9276fd001b45854a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3783e8897aff96e90a8a9bf1f1fb8cf3d257923bd700348f9496bd5b0df868a0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3855aed2a4df1e773e99a1efd66b24280be0cb60b8dda91eb497cbbb9ce86dfc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3939d75b64849af4dcf99dc5fb588e46d1e23173d83cba00a51c1da0c16f4a2a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3976f568b87462d2bd0548f9854a7e7f0af3ae4a1e1fe358836471132e1f3b02": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "39ab4c3a9dde76831035148cb23bdb69382049c8d581f9f93a84f442e3b314ab": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "39cd5f122f1e6b8f63af4ccc3fca8ae41b46644f4fae15207698dc90780efde8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "39e1c9f7049ad899ae172f85a718a038a18eaa1b75ba19accb5cc143c4c9391c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3a1d2390000f069373c9cf7eecee6e7a29da31afe057567b31ded501e96b6723": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3a4b8d6db98f21969063e61a3610be7dd485668bd5c6481120837a1139a389bc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3a57b87ee8e8e143efdde2a45471d8a6b44fc7917a97cf19ecd69152e388e5f3": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "3a6aae0d99a0e38e00fb72a79713a018bdd98eb69ceb362a9d5470b21849ddf7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3aa81ff6a8836e9990eccfaa473312162d3bb852eb1df5f44a075d205e1d1e02": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3aee1201af8d2e170abd21754bb4c5efe358a063e7ab34491a7ab09bb6956fb3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3af6002dbfed72d01ed0155cf3b3829b012a1f8bebd61d2e53a90f5bb85624b0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3b59f6467f60cdc6c95f33078931728705f408c548f0873044a8c60e2099c1c0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3bb66de0779767eb8a2b8f1a0b3f88ba831c8be190e1d1bddafbb372bd665e9f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3bc9253cf8034dd1037463137e1fcfdc5cd832b6d7054f6b2069bfb0362d74d5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 64
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3c10d9fd423ffe1c1727a4398fae12338ee72753f71d1d7f17769514c9eac833": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3cff983278d156eabc605df942846f4bfe0aaa7594c1e9bee4f87300fb71aca6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3d7195ebb797b4c704f08552ff8cd021a898bd85edc8bb59bd485ac9a75c0d61": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3d9236c0714a2484b4f721d9afd63c8b32f8d527c88784943a0a2c744ca59b68": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3e00b7a87d1ae069f44f576213e2a544bf448d458eef16c43c72500bb1b18422": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3e31405754b428173eb4d41214b476e8af9c17f2253ab3763ca0ec1be6a0a8b9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3e5082b6a5d5796747345adfbeae403b0c430ae8942b3d825f9c8922af88ef24": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3ebbd1c2a2f5aaabaa78844719460c95c0688919eda65cb43b1bf7750387c5b4": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3ed274d3bd7885b5dc1b077df7b3c964483d81c5f502f36ed935f758790a3fa4": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3f0799e8a5779d821af5ed0e5358e225bdbcc5d7c8be73f33778a6dd90152e7f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3f3f8a14ed86de146edd4a25de2745db41df7b3ec64851cc16e6ab9c2ad59669": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3f730c075856c561fa6f7795435de554ece79004efefe4185144d9885ae00374": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "3f9a68f2a3c11c77b71d941ad1c6c95ed346b8620c59e2e6f8a39a6c9fd9ec32": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "3f9ed01543d72acd57c0d56c1985bb4c489b7ba73020a698c53d0c62be2497f0": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "4031134cf4a69d45f64213f5570131bb63db996040c1e733453913ac395fd6ad": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4045dddb49352a01b8ac856919f4c060b9d021f968b1a5494c7ce95a75bd2b81": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "4053af6c7b50cc9a6d22db14164eae134d61eb2bde2c0c3efad1216dc19528f9": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "40d5b17730de9c8b2b12c22cacb6a2237371931b042dd1b406f2b675367515f4": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "419cf265102f41446a299440409a48c1919ebbd53f0fb9e6f756359290cdc544": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "421c7b751d4fcfea2f7ab8de3758b5d8f25543e6bca19b2221546beeebaebbdb": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4268a4dd28cb2b9e3934918b65c1d5fee8c6704c063c8e67778b8f02a63bfaeb": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {},
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 4,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "430b4c87d44e46b4a88584a1f548db37ff95265f692bd1ed905d7fdb1210a4d5": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "4366c4b1d2e1f94f3b210ae8d53dc29b42d94eb47b30e6c9ef4ae9ffa08a95ba": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "438c4b00ff597ceb8b615e7da0dad9a6d46ea77e2c1c2da982eada6988f513ce": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "446acdad1418717275daea6feb9ffb2c67745cf6eccbe97bca1cea30b2657f07": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "45032983313aa0bc5341652ae2995d2ef114ae9e343d7c84a70de817d53d15cd": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "45719c6d53a499c36b773b590cdd181603cf15299d91b8464cb03b1e4b37c0ac": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "457de5328dbfde615071e16c62a4407f06359bea7df82968543f9f0a6dea8f81": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "459ead231cca9eb478bedc3f61f639ef26d27b2a6e47f493bb413278757dd87b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "45f81eb148adfdbb01da9a273362009f549520da02c45dfdf520103507fda15c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "461eee081989b50d5f015a770e13bf2c45c0537ba264b2a122b8667cd924bc07": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "46d110bf1bc29feae41be20761dc4498f3c62f91c61e427179d691e1c21f4cf8": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "46df4d23743d9ea839383ccd59ef2bc3e20bb3c9e9ce0e8e669ca8c412dfd7ee": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "46e4d22feefd6faad95089cd1cc32ea11a2ed468f42b4145b80ab84af4fa39f8": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "4748cac7ef25ad226586f59ba468a5db5b3a361bd76f88aba9045402d75d096c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "47585dac0debd2c6ad210ddfe44a881a94ce82ea83d904591b0294384b245840": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "48505a3c75307473dd976573cf548bcfdfd71c1f025b135faea883aa8d7fe085": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "485c646fe34cb5ab787654b07b91d81ea22a2563d42d9962b42c440bce50f776": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "48660fb1dae5ca81a35f1f659d58a0ffa62da19df6514c96535341d554779228": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4959c88ff43a8ed4918152681be86bb82adbd96372ff72a9cd84dab7aef727a7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4961fd76708e6245c03f20c11e9ee6358f36ca36afe5bad7155b0a1bee8a35c2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4a033daebe0ca22cb085ec01c710e12a28f660db4d760aabb64b30a74b260bd5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4bf67290040fb886c238255064f8ecfd73888444126f229e37a16627e2ffce87": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "4c5d82044bd005e471e71c9f3a3fed29a740c73dec4c726b3eadcf66f3d75507": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "4c843f4439790dc58b5a9d986d52989cac49cd766b1d7d92bd8edf0303db7112": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "4df16c1d8751399e15c5ed127cdad6f01c7a16813bcae68eb56cd2eee81f40df": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4e308d0bc22775272998ff5c9574c802431fd7d67e67683651a8ec825effe5f1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4ed1ca573dd672cf572a580d3fb27f2a32a961aceadd13e71800777e59eace5f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4f198a184f316cf2306754d4823e662c49b6635d1d19ce8e753cac02311940ef": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "4f516b6c571105b616d6231f973af0f52d3d029fca99af0d6bba9742a8e7a8f0": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "516679bbf79e34a7817edb9ec52aa1f7706908c1ce5ec262c36edd86e6d5f6be": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "524b199c548059f24d957669db3ce0b6de00346e6726ea35f3338dbb7f8811d9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5293acd67ff6bc593c4003def2631e5ed8478f23ca0ca20eef4ab1760117c8a2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "52e901efb27628daa633f22ee9e3d72563afa89a6be2f975a837748a0f72b4b5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "533edd26aa3c431cff083fc6d057d9979e5c44019e23d13a753e646aa1511742": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "53db6b3a03475b7095815bc6960a5629c2bbcef98cd035bd5fd91a219f3c10f0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5463fa835e1dc0dcfc1f8add37d581f36726c04ba063d8ae7eb14417229693a7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "54751259ab7da07be3a2096dc2534460f8e1ac5def3d77b189b81e9ad71ad149": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "54c769a5d1514163604522dc1ad231d7e7aae8cd4b475a1f669d41c5b691f8a7": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5578de83599d1315d03a304d07ac1d90b70740ed98c62078fa8bd6daadf58eb0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5671cfd2a2b680e9dfc743758a7264b6ba3ccfc949c0e77bbda0229b8d475779": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "571763a3c6dc0b5225cf52c694ce16a453cc334efa06fe3aa91a7d841308d0d1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5740914052b84fe010d7376a1e66d2b86a383a8cedebbf143df1980ce5fb1fa1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "576918e8edb619c93393a964a0a2b93a9b8ec0effcdfe978f875ea46913216bd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5785f6a2cb1cdc1980f85b10c07d296f6f978da117c4a1ca0a7ce2e3e81f9897": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5808e51d7c89c86a90776e64100076695bca3d555a533b0c3c59178f05646848": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "580d753ebc854224f88902bbe408463f2c33a940c03918e8854b5bba441c8a1b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5812bf1b81c2fa57acf5b483e40d5596a42903820050d3e68cc765b7e1342408": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "581833f755c736e83e9b2910a213d2dd3d558bbcd3e7b41272eb96c4e46da7db": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5848b96b2be825009006917392a57c5355967e2b9535e19ff1929491a7271833": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5917dcc9b1c4be28bfd8e732fcd62537a695affdd4535d457bcef4ffb2df170d": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "59291aa3b8f6662d827cff8313008ca6a81bc5f46d7d5ca067dae1b18333eba0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "59df38878c9ff6940896b4df205b693c6c04e10bfe0188e6fb020fbe26bac857": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5a74040c0f3ba79b26b149cbc63f0861026d9e9d2fdf3174d76a791fba7580ab": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5c287590286d3a15f50cd7e2e4fdf42b4e452810e63fb402bf65d783a4bec5fe": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5c787a0926e6979fc577d29db489f6c3195e1c4fb44040d2ce8016ee77c18061": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "5c96e8e3dcf771be660e7a785ef488ed5bfb0b3fc2cca5dc9db727513054021a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5d02a1634cfb8cc81338b56c144ca7357f5fc5f068d967d2aacf2df6ad621ad3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5e59e5cf8efec4bc6e206b2a93ae69fbdac882479087db6c828126fefa76e249": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5f15ed0cfbdd659dc735e02da8cfe531c71ae4de2396e0fa9cf72d3809cfbb5f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5f3a8e7bbfc63cde1e83698683662f04a982b76c7fc950c698223dfe17b356a7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "5ff6d6299ab43ede93f74474ec585a1a3abc1dddba76fcb764d62542df9a9211": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "602380828f6007ba1154b428afdc76fde56d5e1887e3210f2c04dc202517752f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6056cb193d1944a1fd8d64f5a02a1af1596e18b9856a8e4ff819bdfa5ea5f7f5": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "60e82612009983a7487d7f0432c8f3807aac63f81a48ece2b7a190c02d8c24ca": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "61153b0444887e9b8e1a4c19fefc69a7d7bdefab07dfd8b3bc570860323ffcc2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "619cee18ceb99f6a4bd4f98fa4350cba90e6cb8b3a3ca6023bf356e5ffc53ce1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 64
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "61ed34167dbf21d934a2fb9f61153441a9dc99fcae9ba3fa52ba3d77274d274f": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "626ee661a8e03644384e24183f3a899be949651c9facbc8556cf0bcba764212f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "62a1aa61b750ec0232af7425a09a53e503edb4f88a3b8c6748ff66c30d5942b6": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "6347ac6e51e1ae2f390db768a4182374ce170724575c055e0b1f97de4cd50d59": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6381d79936090e61f0eca4b22403285810bd4d6b409cc278c2762b1c9ba6398b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "63d5f2a4477f4d2df466250216491f93932068c4f35ede15be6bdcf5ef51e376": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "6546effd2582e641edbab41c4015e29ff72310e62ea2505e12a5907fa26a11b7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "65e2f7f02e39ff6de53e5c65cb89a474059e65cb2f259643ebf5a530a7f9c930": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6677355e230ffed3866dcc075420812b225d84feb5fbe541dd87ed412eb43d11": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "67598b6184cedcc82728872add81e5f810c46661d5462c657cf502a78630bbf6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "682c4c21da55f4037ae6733e32bdc965c73eed1ffb5ff5b36f638abd80c8ba3b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "68fb3605fce5d7c3d312fd7f171e2889ca0b4d6d7594b9ff7643a4070ce107ea": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6b024ed8fbec86a493a076ec5cc017d302eb86e5ec43fc5563ecc267e40e1b92": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6bb428a23c3535f508345ac54e8232cac5b54901a732e267705b0434bdd12a9f": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "6bc09b2776a7ad986325361841acbb05821adc3a3131e7abdebb8e470ae0c48d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "6c01c754e3aa3e0c42308cfad710b58332e237c289bfc49dbc7751b0abd7f987": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6d887be5cbfeaeb65e7283f947aa3bc3c4857c2f98d4d1a2876a19b9b56e8f9d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6f0528cbaafece99556a348e79dd25a9012d1c778d02af04bfe1091c9bbdce11": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6f3af61df6e861f67694d22d380a9105a8c3cb4980715ab2a5b03e08463a58ac": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "6f5ca2b36f9d26b2e607282cac1fe8e612dd8bd8d1e38acf7f7d0f5884a5847b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "73c75704f8d83de46602e5bfa9850270e0e2823239be377c5679b8380ff80dc9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "74535924f5700ff5bad5fc860a5c69f21f167fa103202db471db0dc663847b49": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7454cc9d1975b27624a44480db1091369b5bd5f364c82303f6a3283198872a9a": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7478c442ad8ef665b97d71f49ff864d7442b97041863cbbd05d3613422b40a6e": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "74df9e4fa01c3fb9f7fca2886c49b45ee0e81725aeecf66356c14198d69e9b22": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "74facb189a088923536f7b30081a10168b5551e23cd0e721f487fef53242149f": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "76398b913ae1c814f5029083c560a45b386e0b72d2dbdb3830e6c3dffc8e9904": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "76d6d39963dec233ff3e201900b2fedc2e63607a4bd8e3272e9ab0fd34b6a42d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "771a5a1703f2a03fa1bce232d4c7f009ef5eca37dec9852a52b8dad8f565ec34": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "77c80684056b6860076445d1dd9c9794a20ac82f7db651adbb832bdd98c34d5d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "77f0f6b7bdf90cdac7745ce76d06c2b8eac2caf39f929411941ad4546d7aacf9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7861e7c09c6a1d338a35f0aa212365e88acb27617219b4fd21d70a5956504232": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7887bf81ecb3c16ea57b7a09222585905527d124f0df5e3b73dc9fe786be4314": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "791579ac947e4746d7c220af5830fea128a12e18a72c6182ecc15b7c09941bfd": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "7963b41d6cd63941821939267fdacbfb7d353309b22e04b5891e5a0da5097df0": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7a17cb50866c2c15beccbcffc45b22db5995fac5b0eb82fafd8eed554256fb9b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7a88fd7a800867c39213653b51e34f73ba1eb86b928ed31ab5a59d5c7cdde002": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7aff37ea42f89b803dffd57cea2dc52e8e30dd129a8ca1884258b88099f81043": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7b851a30c8baf4995be6502487a5d7f33d4e3f64737a853856845ac24233c13a": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7b9e63754b4fbc1d998a055f69e5c79dbf9067121740334dbed17e9492385af4": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7bba7b0e26ab87e09ed2edd44b85a14ae36c3f870a7e6df048068ffbc0df70a8": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "7bf18ec3af2ce8162c3da3265224dfe271184f432f8a04a62ac983f680d1af1c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7c6e5bf962222af4bb9504bfa3f12ddbc4dd9958d3890bf285f5efdd8f67a0d1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7cb586e1a5070591db7cb6fde01c5bee965604b2566295a866995f852af4c8dc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7cefcc1d6fa7568123159e1a3d8f63f1d2da98d9373217798bbfed2e90c13371": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7d49693f60e98207f1313405dccee4427bd598a430b93fcf58ad63232b03fd7e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "7e7cd989720fcc6db0a29e3b3190ac80a20434d3876cf3f89976a642934b155b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "7ebc5a3ba276cacc1fcffc73ab1327be20e413a7f5db1cfa0fc24fcd00d527b8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "80281c89d91529fe826d27428cc0b16f1ae4d0b187af62a21a7c5df7183587a8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "804089f930b0fce15dd81478c9ccd497e4e69341bc69afc4d832c328c8467da5": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "8124c693cb301b0aca996f85ffba1a5c21152c54b2dea6ccfaef83832878957a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "81d04e505de909625f80c79cf05cc816dc476e1631a0aa362fbbd4fc68c1b0ca": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "81de6dbe5705faa32c93ecaa1aef6d2af01ba642e822edd7ff14e65b545396c5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "829ae8aa7827393c30234ca24109de5828b9cb507b147592496238bf84d7c09d": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "82ebc225aeafc1ec6e009e67ddb558c9ca774d8fdf1500fc8fc31b79a6842b0b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "82f11bf1e4eaa37bf856a83326e8bc0ddd0d7d4ca1bd4404dd59eef2b58caab2": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "830889be148c400d5d236c2eed7566cd05c3e69b921a64eeb7ad60eca07cc169": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "835188a856744e0802b319493abdffbb1e904bfa7adb33ba18adf188052cce55": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "8352d1de8cfeb7ffe86e238c49d36b0f82c7ab6b9d7ad9f11175db186cee5da8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "843c4e2583ab20db90afc3d7f2153e9c9f81db3fc8f21a5f38178add78be3c1c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "849363503acb8473dfe3be35b4d2d103c0a0877cede2798cd193cc8abbf5d301": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "85b26db72592af1bdc1e1a910f45d2a8fcea25b5318e8ccf43bd0b90cd6e365e": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "85da764f47726b9826a29932913e65fe64e02cdd04690e0794818edb963b640c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "85f69bd88feb9e1d6032cb589e61ab411fdae8b1fdcba9148f4564064f7fa457": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "860f90069e7ed76d093f54b27b4a23385bf287c9e9e6b03d08b45aac1f8822e5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "8611d26bea40928b3feb2ec9c51608e7acc30a872600a5bec892d80e1f625a07": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "86affc8df575dda35865b28742b5a5621a6cd6737b8c9985e752744655d4610d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "871292b9e69fdd5ab72bfaa4ab0c3520926d1fbe0682aafd7ae170e223ecb966": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "87802af39da5f9248cf330b8d099aadb48d63daa8b087b86fe9807ee66615bd2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "89349dbafde34505b035a79e5fa631fac6106af88c9d97e2d769098eb2916161": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "896d8b8ff14283f4dfa61c408626f1bcbebf2cad3f6350e7afe9bdcbc1384a2f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "896ef2c903b268857a992c5173c1e983c99fcd026c868c70ab9402098caaa928": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "898611711e6aa62837725c9d06098fe055c688c0fb812dd06e83e24c62c92d6f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8986c11484ba7424eac1a2590ea467b504028f2f3cf3150504b55c90b462177f": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "8aac98e48a8856eacaaa851d9f5bc62652336556762a3c8092388cef8a8a4817": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8bba8f2c4381c026b575ce14ad94ecea8a1aec25b173f79dcc643e0f747921eb": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8c4c2967e8095adccfd54488614b29a71c3a496be7a6d8fa7d98303caed808e3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8c4d683939e39ac9b8168a8ad8084bc4591392b7acbdbb3a5cd31fcca4352fc6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8cfe87d9942c7cc02ad52849d5a47d75d3b5b3c5a2c49934856a1e9979e65c9c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8d1942e40bca3d859941f41539184923113a017fbd2b8d86cf7cd32deaaf780e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8d45ce2c2760de07a9db2c9ca80fd632f438b08a3677c547259e672cddfd1c23": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8e5a1bca68094821c84aa1a81e952a0377f1585232b0c538caf23b68d1950805": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "8e8b545462d5e02e65bb0b61d980977e2c1201e9d386920ed9d386d8a96260d6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8f002f5028d7458f06b017064dcdeb9dfb6de9c830563649bb27b3168a74acfa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8f05da99380b53be93ad5d602c13f0095b9a067b539d2a5f05fc4e9db3eec672": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "8ff6fcd5cd8d7dfe251a7f2800e861f9d6f63ecd32d1355d74cf5241e56e11c0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9163eb54cce13e7fbe248cedb71d2c4634bb7a340a09141073d314efc4f40a7e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "91a1473f18fdc336eaa8149f32acc5cc0cf71e6eae5041289c3624508e7a6752": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "91cc95f3a862863e50872cdf5238d26f6182a890acfd5e44319f86cb4ad96202": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "91dd8bae22c4a893f56deb5776615177174ce4b652fa8cc302a4143dca016098": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "91fe4b3d8aa4ae03532385ef382ca121a1e970f1e53c82f9c3320484a16e8b05": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "9271c18613e082e76abfea25c10fe8be0087d323a127043ebb296b5c89fbc960": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "9314b2cb56884b90a4a1d0d1c4b643aece6b218e0ba7a25cafe926cd23080b7e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9353d8df0c13910328947acdd073e87e5de8bdf1e798ecca480feb70372554bc": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "9388201e67e81f1c06fc227c1d222a1b86f7eca7a9e957eb4b7731acba71a623": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "93cd09075a8d4f3e48892b9f4dd0eb63a3e0f90d4585a8d2bf3743438c76e8d5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "94087875a211353265b68262ad238e385914ddb8993c4b039d6274c83748cb1f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "9433b55233ba8d76b23737a8683bc13cb68b3819c6cbcd7b9ff76b00db6755b7": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "949acc161ad0cfc538d7bf3414adc948f31d1c4cc9ad2c6482bb47f433179488": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "94f04a4d82956d34f18204e591fe20b4e7afb47e67a0816a12e20771b86cca3c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9603c8f06e0db8babfb9150e7fd0a09b4004fdfa9299b86eab958d3f51b2ab2f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "96774510972bd5ddcb462b683e0f8c381dfea8987ee578aa8de0dc0f42b150e9": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {},
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 5,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "98c794c16fcf0828bf58f328d8cc0ba290bc305f0aca8323a3bc8137f9f3b53c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "98cf62b537e04ff3c6621abea1588ecde6df243e6bde91522f22bc1c220ff39a": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "991b2d3946110f9a10269cc146eb9c2dcf78eaaebae7745665642f1f32a21cdb": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "998ffef421fc09ad4c835de35c44a86e9e36527f64d7ca0dee69dfe03d50b7b1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9a1547e770633f8c72a9bd9c5c5a4c5f19f16a375e49b281f5078c2d048a54dd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9b0fcabdee183451101ff77764732627495c47194aaff570d4aa4b3ca6d27eb3": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "9c02aa1dc549e0a832fef2df9717c11fe5bccca1c2a2375324b9e50fcc7d97a9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "9c0559921d0a9f3ce4d74972506de71cf8b172edbe9370cb38bbb023a4a17cb0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9c273f786a7e52b29b98313023b3ab7389c5fa1ce041acc6bf7747309dacfcbd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9dd79f78ca1d8272f08709fb74a3bfa72fb42a925652ff20dea08c39da1b620c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "9dfbca6f43a207cea9473ba0bb6f992cedec7ac193194239394567cb99bbbb49": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "9f77de25e5e7f12654e35d0e1cf3f74caccba4dad1054530d2c87e72e10b3751": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a0fbf03e7dbbc1fe4faae13db53539a4241856832b8aec14bdb8ac414c29491a": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a18e5d41c45f131a05d2c4f5d1cc1e225ca14723963e2979bac1049acee87907": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a19330dd9e4b1ada584a3fd513f60ece8efef67cf724cfa3dd7b323fc952f848": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a22101dbe311e3acb5d293218b5f53d94a7f77caaa5c36a8ce74bce4ed530193": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a281281dfc4c56d8009207a5e73b20d1f6835f1e0b299640e1a4db7ae49c84fa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a29fdc01bf90cb9c4300a6c3d6aff8135e6d519ba86eb60248919098a76a8757": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a2e9e1658e7349e189d7aa26904c3b519f32aec68066e3825fdaf38a47ba0aea": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a2eff62bdfe86d7492e1120ba545a84dabdb8d9135fc2eef8c8484ed84681ac7": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a2f0ac5f9bc8ed10f748bc20acd8efb2dcedab1f59d0321b3eb22ced44531dc7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a2fe759f9a2f30de59bd8ba07c745829e375ee5c4e755f77de17dc46c68a5c83": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a370ec688e1e6ad663bdcd7533e21755edb23c67be1a329a43707c081de4587a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a3e6bfcf1c16960ad221db586cc28680d84cdb8677f01f41524a428710adbd05": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a42d1235061e926dc32701139a72cd4855b692d80b8e005bb7f62065d3d8e8da": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a4b6073de267f55606366556388f7f6d94103b41039a7516a44c2b60035df923": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a4c6b067cd3e69e6c815e2e489636eb02e558ad88cb30ab4421940c81f4f7551": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a51f0c2f36766c1818347bc95da9de99e932c622f2151b99360f29390459a447": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a522cc5bb0cf2e8dad68b2f3f22ca29a9ea0e2764b82bbfc9024e8e9d5d60c44": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a5443dd5b275f98c8642e45540b4fe5525fa55c9e1a77caea3c168ac5a31e412": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a56e1c7eee6dd577f37454b46d06f1bf5c8de4853a8a0554fc62747941084b6b": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "a5b2cabcd4aed3453777f7c7df7362825d1a9bbdf8c62124e685a2e2bb965d3c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a5bf05d08ba854b05846390ac4e926f09060e688c2f73daf459bab5db5231f70": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a5ff1f1f2b4f72844eda53f46596c3d4c33103c5a1ea4d2a060591476dab0aaf": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a62860c2ca85538c39e9e86a4c423955c57558aa0c011b5f7511ef9da2a17edd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a6488d013f4920c844b4c1529d4b1679f94c7613b8e9deb8772019f489cac879": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a7435b20cb9801ed3939af87104c7cff5162e718bf719199abac6816950d3b8c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a769da0240d99a98672dd787cf9fb2b6af89889db5cf5474ad5cae04b524a8d2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a7ca1ba76acecd5648f819905efa448c65159d2a0520eb6ed451617680604990": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a7e85650c1edb61407d99bd7eef07b0e776f1e7ee471349c063b9c6e62470a04": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a88b187cc862a189371730ea26db3bd2e0b6d8e930c91c3b0357d5cced50487f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a93347990c7e07c85fa5d3a85c2825744506335fd69932bb927afd41ac076acc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "a93dd3a56cd84e0f1c08a26546cd97695caecf73c54ac0ef5f8667be9ba61cd9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "a9fe5b7f2d6cadeea8bbcdf5e25671a0ee12f5b59d2961f423f6c763a0a9e5b5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "aa34cfc9c77ca408a200f09142de6ec015a461b74d30ed37b73dafc0388a4632": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "abcdfc9e9688f9a84cbc014457c60f00202f9cabab8244f04d5c7c5ac5abc5b0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "ac18887eed637d8b67cd05d80f103352ff05131cacef8d4807d51eba7b1c7d99": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ac685f843387053f8aff4b1ea25a117d5f8ba0819d636b73286fb22df69ebf51": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "acb10563e4d4a9ae946868dd93f1c8659fdd021decf91b778d8921a2e5c920c5": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "acf604c3cf7a783589176449605be60788af5848483c0e20194bd795e966e1d3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ad25dafa5b5b3021d2d3c22b16dddd453e31efcd2e4b47fcba6e958007f2f177": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ad43c9fac212451dd3410c68446a8d01631a35b2bfc0380f152e4328f5814e25": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "ad6b2ede06972239eaade4a2b170b125b858dbc19c89d783b96e89642a45811e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ad88eb7f6d1edbdf6486ea7b3b67a19e9352cd6f4b35e28ffab90744497cfe85": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ae5b89e7800d14472426bd09080bd6224ff391f67ab2dd53553d79bf377f3753": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ae664b7730de2afaa3cdddf45d6155b869346f0d6573a7365f3785a09a2f8a01": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "aff1ae586ec919c8bcecc8eeab5b1f46978ec9abc0d02fde767dc630d2d3ea40": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "b0eec1e51b1b411fc0140e4187c2725e20885a8992a0a8e35d381fe350b238db": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b0f815afc0a90c70b2c1534c5230d5d4084dbefd4e6080009fd394048e98c403": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b11a0401e72baa74ccc5d2e279bd8ce9967cb39142149cd83687a219a75f7bfe": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "b16ae0c9174e8a0f714e921ee1664584f473dd5a99cda2fe4efd5c6371130ca8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b17270f6e9bc54d18c77c4b1de80b2c1b8329fd05a0a3278d5dcdc517a5244a9": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "b2093384ecb6ccb95f9c993654a2b58e4bcd516eb2f74cbae9c69ef4837f8289": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b2ed14fe4bd16a80c0e007feef2731866893550650a850107fa3420cde2ac008": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b34115d5d1d9c6a4e91c0d48baf7ee34d59e57031e64d057585a59fc139ee676": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "b3e4a36b31c3e883dfb5355d9c2846a4126f99673dba624098f4dc34606dcf32": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b43fc05f6f7a14be6328df46ec02333523c6cc3a69c7dfad0a8ac7124c2b2280": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "b47eb2622a2c1aedff08fe98c537bab6206ea2dd2bb2a4e517b6d3b82c10a8b2": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 32
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "b4d062cbe778db42fc15fc7c1e5219846d33ea0b18424b582cb1a5a3cb4bd7d8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b675e851b557aaf3f16c7255d95412df87c946cd935b2a58ded65575cdd339e2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b698a233c90b7ea710ca180bb93d4c481b95322bbbe4904a62007ab24ac328dd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 4
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "b6ae16b6b3696f7aa6f2ab847eab282d23990876734496f8fff8ce605d50fa33": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b6f6ceaf31101dd1e9a35a5d1dc281e172c169bd2bee432167655efa35416eff": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b7574851ae04e3c7de5d0070793c73d64d12c810486dbf257aaf5fcc9ec3a242": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "b7f053b4d9332b2648c4c78dfaddf505759d0e8a07d72275465112bb3e940a69": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b8a1dd27ae001611dd4ad1a1c485f02b75196deea313f184e7d9cea4861da66b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b8ed6db2f4a4928b0c45081c3da2338e052e36878d9a6dffd2142bd8d123c83e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b967f32f68f58d01506dda29b9a561134d8f6e6a015b6c2343a5d8a88ef89ff0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "b9d745e01d7c70cab1285d226d1d4f28fdb737577877ce258bd56bae4e5686e8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ba0464170f37f5f1c4c71426f51eed98f77fc17f1f5e70a4fd54b91b9f52d7e8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ba98c0e4bdef655acbe1c45d51b779a49e624835263cd2005830bc92e2117d35": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bb0f62a268ce42192ab6a6d521e0b87ce0dffc62300d7b5188d19c2180a7cdff": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "bb1b26011affa8d9bf95c25671ac2f5e313882e70fb98c044d206b3d83d9f02f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "bb3dafe8da1597f77db8050546a58a48f675f66a78cdc02ce1c3f3ede14fd952": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "bbecf4e2dcf6bdb943d65d01201115819a56fb9edf74b36cc9878d48c03c59e8": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "bbf0981662853a79fc6380a2eaf27e55fd2afbc0199c7cbdbdc453ddcb83e21a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "bc3509933af0fe3bf0596df467341cb4eacb714cd20fcb85ba9c7e700347e8e6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bc458bdad536fb4549f45e4b4c4b21fb374d6c675fc3c0887be12a967f70b1aa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bcec97255315dbb663aeb884397897e369b038d4aed825c6a5f16a358fab38f8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "be2d72df48ef6551f5740844da98a0d9ee4d95cf96f3e5165eb755aaee5f851d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "be7186ec43227478eb3c0acd79d2d0516c7dadab6005a38f3752cf868182905d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bed6e70110919ba8966806b4fd73bea4ec70c065f5983c0350341fdd57d0ec93": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bf0d6fdd485afe5e0544c7c1411cc44a3ea4ccbf2dc7aa29cb1b5a565694ee7f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bf1935ab91d425320e8cc17b1942b2f2ca5e5474ea9e3bb122282c354466a918": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "bfcac38d958b0443ae255c352b56a82ae84399d060da6c413907eab4521702ec": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "c03e6bf86bc8471b3c3883762abffcdbd47ffb5a037bb9cbbb955453d7d9f2f9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c09b7db9b9a4fcfd8e58a5dab58adcf66ffe60f5ef4d6fa858c529d5e2027728": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c0a75b44f2b0c2ffd098eb3a20623d46da739819b42ca20352a30193340206be": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c0fb4fd49a2f6e7a21654ba574e92261bde26d61c2a4a599a4f288a786f36872": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "c1308bcbf9ed7e7ca82b2a630e977e9897c5b31918b549a2cfd52ff8c3123200": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c18a09a85b4534fdf1cbdb86064fabc33ec6615727927572f0d6cde2d490bac6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c398762672f021b1650a7341244b9aa584edd00f5bbfc1d228a6c19a77852fbe": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c45c722a526cb7814b5d7237e5e2ff06017dd67d87bc24e54b5e5d71e132c08c": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c47de202b4543b27a3d9b8aba8513a8b9956da726d65244044ef1f1332458c82": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "c4ec20b1f0fca4ed44f3b3a806f1fb5e0bead21147c11aca3ec57942032862f9": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "c5b73462f4b6ec750183f43179baba3b8a785a81effe440b18af1ae663042af6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "c674d2f29eb110c237169f92b741c8edb8f0dc88ffc2a4caa3acbd0bfffd60d6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c703d6579516c341a09926a42c167c071eeccf846555f20063207fb86e1d151a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c7b989f5b95eab30752faae562322353877503a53c8a3fd12d9bc2285a73990c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c7ef8a0f35e134d969a8b330074edcfb9f4bc56afd1286c4270a5697bf44273e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "c7fb3e621eebb36bea6a0d19d0cb4c0c07c44bda1636037161c8108991155185": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c81b39ae81b249a559a21d0225abe5f358e80ef2ecaee3dfa58f88d9bad56dd3": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "c83e80ca365b578d589b237ca14903ba6b65969c254db1666a312eab44d51858": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c88e83953a9c2216b0fc29755c3e625e791df3eed6bf783bc7d7e80120e3a6ff": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c8ede3f1400c1fd18cebdb061be11d874ebc06696f0bd06d5c94c2ecb374fd2b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "c8f7c4ffd6000dc511b9c2ac5b50b1e252d0e61aea5282d328dcc1c51445ab45": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ca3cda46ca47cb2697eb6d547748b5cab0ee7f3b28af4d42b6ca3bb9ff9a31b6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "caa0ca38743f602c84027f13e134a4e307c58846814ccd639229b43ea546074f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "cad7fd8d6a5cb6072d71aea2f160ad2b8f042100c4af8f6c3a5abad1db83e5e2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "cb227d1e85402ea154480d99bfa10fa9ba0e8c1174770d4cc552c8976af573a1": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "cb55e63a6c47ce622d41480f89baf410add8bca797305eca75a61992d790803c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "cbea0a8eee97ebf36b39855b84ba684e5ab9ade556d41268e6ba074b6bfcc642": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "cbfd83378e745aa8a7470d31e23634310460eed6ac9aec67f2809cbd3b50677c": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "cc67d2c6f7da120364d65f66b71f1671e1e0861382065f9fbff8ffca437cdf0b": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "cce3f434b66fc0f63c15a6a483f68206c17bddf3f4a6ec0dd3630352dffa7122": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "cd57bf3ad7cb7ff639da548c732e32a6a7fcc67bfb8f81605f903aafdb3fd5e3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ce4964173214e40c9fcd3522f3709bd0709d6cb6482c855e933974f74f7773dd": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ce6b66f0b72d9c7de0282b114839388ebab60a0ee6cdce29ddfc591bf83de4e5": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "cea7a2821c7743c0da0145377f4a610dcf5a5002da27b4a29c6fe68d96463830": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "cf0f6abbe3460c646e55187858234aabddece621e0d8b585f77813171b3da5f0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "cf16d2947665953efb139f2aefc8234c4df4a2e668b8dfe417639b3a099c06a8": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "d0e444093f241ff8ce3923769e1a56c3e108050b43bdca0cadc7adc5281dcf97": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d0ecbea5c430a6215c09531468478fcb6c794b55e2c80e81d2850ca34a8f93dc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d0f297023622d4ca4778810b2535c225dda3452690e0dded135e8e7c9c0fb4ab": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d3a960b6302535bf7e9cf32a91e991de36f9930a6214ac5556fea2f24dad3ed8": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "d4b529bad8e781074dcba7d37f4c8420f3c921a1fd974dcba6731cb44ab669a0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 64
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "d4ca71c71d2651494211562b04677eabf4f10aa93d96cd1ff7cfd6d8c87d035f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "d5431bf21c820810961e437dc97840b7b59b430c9c80a686348284b7ba521598": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d5c7aa091d63fdcc18e687c75469b1817ffea73d92260e3e9b6a809de12d2598": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d61f67f166858d295ac6cbaec048723bbdb6d15dbc703fb4861b795fcc889d56": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 64
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "d6da642b6caad70ad0ebd2f4e4a0c56577fdbb4f420999f8690706848acff829": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d71330dc9156728c7fe55d7c416e09e787dc8af09da00bb276f5092f21d7e806": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "d71e5efd7f9d3a92b97fe317fbab8cb38f7e68b10245767efe639fdebeeb3c45": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d73c2f54ac0029f0daa8c439aa20e8e9aaae8f5a0609a30013dd5c1829d6b530": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d76715e5607c80fb3351b9759ddf0831d79adc4ad30c1f74b891397bda6f3993": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "d7dcbe487e327c8bb4df85c621079b9e149269ace0e51d63b317feab3e53a242": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d81dc9a81b079555b4eeeebef773276e84d600f0c8892b4d15c47916b2d520bf": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "d8e46bb151a0661d604f926d2d5ae703ff965a902d4f902034a7e5bac6dec1a0": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "d8ed790b40853df8b315378f77653cf182aa06999b9c3eed2520bba8b0238dea": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "dabea482669f28697d8ea300af933445102520b7b15ef8bea4be13a18ce69421": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "daf0268b66a716171801c838906358f2ef6e1503d30a942f051b78a0cbbec740": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "dbb9d1300bcb08c9fe55eac82341b98ad3f693122855da8c2c41a0ba12c333e8": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "dc61b3ff3a30acffc728a0af7807c4cef10af639fd1ab65eff1f777fea8f8f94": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "dc8eefa41ba25b00676bbf4d852a652bea307e6e39925bd36c5a698ffae4bb93": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "dcc90865ed567029bde5fe500ed350a6f7736fed28dc135220756410147afaf6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ddc77cf4fe76591b3f673e7c320a0743a303b2c7b5f432ff4dc3a5757444a8e7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ddd08059b62edf1ae382ed0436d31081e15d75eaf91902b09fdf91292dd7c034": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "de565b722f044c6e102db729359863d74b75011de01a18b2db572bb012508e8f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "dee84906e8e2be33e277aa62747f0526b7c5f34cc1244df2101c870ee3489bc1": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "dfbc691b69cdbf6d62f33d40f846304d64668f5913d4e3eb61b62cd5f156a229": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "e10e848e54e35550a0dd0f8eeaf36078dddf11c2dab83689199eaca869430417": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e119f4d92954b20d5f16b093a20cb2fda8c87134db73cece132ffde6c1320d32": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "e138506aa4498292e6c52c6c99cf7d9ac6c53e55b699318a91fe2610ec2d2ada": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "e1951c3b839f8184a6fae6b8baec794c875c214fb3cb4171fc8503896d5c5848": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "e42d3ea18dcb3b48c7f5a8091037b77c20f74b6f9eb6fdfb31cb45dae7b107fa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e48fa77b583f5943f18e2ead516591e47b4056f44893a94424897df12de81e72": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e53cd23a02a84218f64dea7ff4f9f36f9e2d1bc2bea274e941afd3ab17726829": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e5cfcea41818ddea71b581b24277c9a453837803c73f0d0320576efc169e6360": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "e6b50dc8b9a4d479fb858edc2f02e62e18a21f33951a541fc84e7dccd090f1c1": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e814e113796bbb05f9aa78943a847f18b759306300c4c13d219dd57309bfac77": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e8a6486f634a874b0f2bacf500b74e4a5242301c66882a02869379f34979db62": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "e946ef74ea61e9f55015d0ba7d80198bee78bd82e9898aa0953a468cec2da62b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "e9e4b6d322c29e4277b595474da604e4da83850a368eb2ee1984ba1c1e8b9217": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ea0ef1fde4bdfc71f4f82f87217a78f80865be1822fc792214b6be0e3d84aa8e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "eb8d6d4456cfdafe8e750d2d3be40afd2164df595fdabfb04a1f6c5d06792be0": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "ebe93068d36b80930c7de8322ce73cc0e7b0d378fa163a7171d27861888b2b28": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "ec7074ceae3733cd07ccc0f9aa5992e40f1ea90309b4779633ee7a6a89558313": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "ed1a64d1f1ee17d2d5b6103c1baf0b28899b5aa9b8423461c1c99502a11eb4fc": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ed70cbd18c03c0fd4cec44a587202f5eee4d88d297b8cb9734773f78b059dff6": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ee12c4c9be07e1445861d4212dfa811e92aaf552163ad48102e0330a777032e2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ee9afa33a03121298fbd574765546734810f6c1057344e84d0c79e5e6138961d": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "eea8ae73e120ee7c8d58b22187a93b8fa0fac63d1ba68cbcd25e20bbbb5a0f5d": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "eeaf068d0029d5fa18cd6194b20bd158778c00d1d1860cd6705499e4a66ceb3d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "eef75753232d233842df61ebcc103f2bd8fd68eb5ed81b82407b5316f9f166c9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "ef02651e52334be33eba9c6f45acf6412755c9306e95b36c4681a2491f47f397": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "ef213cb6ae812d6a00ecb80b93167510d8fafca18aaedb366a5ffea7dab782d7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 8
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "f017f2202cfcf9d7a71c48b90af8f1fe3e76f45aea03f4075649ca972c9726f3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 2
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "f0419bb4c567f195fc2ef8825fc4946696ad90ed4350339c36753713e5f06c11": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f14dcadda2294aac9b88d1b6376365a1796c8a3bd7cdb16b99e0313ca4e7ae9f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f1702870a3c22c1058e7b9721b346489061fe5b703bfc399694c5c6ca2ec3850": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f1713d180c1599fc79a206f40985eea53f51cee65be7585cc4bb143c2ecb6de7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "f19c1b469e0467e92b7ca6b381bdd3fc03cf887a175c73b115c485001049bc1d": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f1a28d392dc51b2a3128bf2eed25565e28fe215224d7235cdf624ee625202f35": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "f1c3c588d729932e1674eb9d7147f53a776119e2fa7c891e9fbe10584bf4dbed": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f1d279ab926ca80aab310d9db8f8687a4079b505eefc38541229aa35afbb747e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f1fbf318f59f616f91e583accdb804fb1b05a8256c9a27f93a65415c1fd07101": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f28600f5afc2d59c8fa9e6f03c8d6a977919866ddebb1a5b9a17f4ae2b74436e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f28ed6a9ea2f0dbacedf108e4205e894f8dfdcd10126ccd96e954e4d411e509a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "f3079ec61b13165e6b8cb33e37d34f81246dbfe7e72c5b49cb57af970cdf0e0b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 2,
+      "pre_hook": null
+    },
+    "f3c4eea2c11a33a5e0e231dd4a90918e47e8bbe06483a39e00be8a427ce67443": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f3d50693821bea2320490ade81bea9797c975ddbdbb21512be5cc31442a5550f": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f3e4e5e55972a878579a2e381f6df199ee498850e8029e302de078ef3f9e6b99": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f3e6012d73d3da41a960b102c82a23a5e8f31c188a1fcad73948601dbf63377b": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f4411322ec3fd7ded8c8a2e706ecc8b56d809cd5ed8fe21dca0334e0b57617d3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "f4447053b9a8a841bdcebf0fb86d7d61f28780959be6ba6a4acec2aeefc39025": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f52a01d1f300b066990560c69bb9057ae2e85382b08c9d14721dc3bd352d0f4c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f52ccbdec673f653e309e05162954953e1fa485c957c2dd847228ea44a82df93": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f54ef0734b30f211c2dc0bff039ae2167ab0e60de287bec22a4c4374ebee8adf": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f5937db8b69d14c8b8a88fb043b5b948b3b2755f47c27bff1a45b20142591de2": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 128
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f632e6c073a05a32d927330632244eeba4f4a738976f9a0a6ee97d2904b450e7": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f651eb6bc506c3283b01523dd26d55273242ffb1be24bbced6c244acdd9ce89c": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f6713ca6f6a46fb326371d1fcb94b96ed72682e37922f93284ba7ea70e5ede04": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "f6ecdf6da6b3d3e631e1c9c8cbba3dc4b595ac035ce564e376dd8df5a7fc567e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "f6f595b827fdde20314dbb7b514e5f128766a1b4e7771eefa4811084439a19ce": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "f8dec3c11592ba435f2dae8e6469d6b42390b9f62c3f16b70e9e4eba78bcdfc9": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 512
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "fa326ca032f14f63e55a21e07499466424d18e7daa252ccdca37bf23cfdff178": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "fb169e5e842ec60731ae282423b743e59b586fd02735991c3c12ecf39c484cf3": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "fb4be06432d89243304e4ae42b7e98e942f9e2a66c848fab3eefa81f8fe1c50e": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "fb856afe4477012bdb10221b6165cd4954662eb21f537ffc2c16778087ef06da": {
+      "ir_override": null,
+      "kwargs": {
+        "R0_BLOCK": 1024,
+        "RSPLIT": 64,
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "pre_hook": null
+    },
+    "fbc7f293d83a65a0eb06ec105cb5339f5b6f4adfaf3b42dff6c86ebd69075bfa": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 256
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "fd621319d093624012387c2aefab69d1ae925d273f89b8bd46f08b9a345b427f": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "fd75b0d6c77577515a6e2c37ca4e672b809747839b7553845d971cc3b0eac524": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 64
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    },
+    "fe8cf205af172c8d25b1eeecf6bfeb7f794e3a8f7e664e0afa3c4e8de54a522a": {
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1024
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "pre_hook": null
+    },
+    "fe94df16c72d9e043e08fc2d5f96526026282dd7172ecf0bafc95d947f1ece14": {
+      "found_by_coordesc": false,
+      "ir_override": null,
+      "kwargs": {
+        "XBLOCK": 1
+      },
+      "maxnreg": null,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 1,
+      "pre_hook": null
+    }
+  },
+  "schema": 2
+}

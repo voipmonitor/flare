@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Flare community contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Forward caches track execution sources independently of terminal presentation."""
+"""Forward caches track execution sources independently of diagnostic orchestration."""
 
 from types import SimpleNamespace
 
@@ -11,7 +11,7 @@ import flashinfer
 from ignition.preparation import aot
 
 
-def test_presentation_edits_preserve_forward_cache_but_execution_edits_invalidate(tmp_path, monkeypatch):
+def test_diagnostic_edits_preserve_forward_cache_but_execution_edits_invalidate(tmp_path, monkeypatch):
     package = tmp_path / "ignition"
     preparation = package / "preparation"
     preparation.mkdir(parents=True)
@@ -23,6 +23,12 @@ def test_presentation_edits_preserve_forward_cache_but_execution_edits_invalidat
     entrypoint.write_text("port = 8000\n")
     publication = preparation / "package_file.py"
     publication.write_text("threads = 1\n")
+    benchmark = package / "bench" / "resident.py"
+    benchmark.parent.mkdir()
+    benchmark.write_text("event = 'resident_result'\n")
+    recipe = package / "recipes" / "example.py"
+    recipe.parent.mkdir()
+    recipe.write_text("projection = 1\n")
     kernels = tmp_path / "flashinfer"
     kernels.mkdir()
     operator = kernels / "operator.py"
@@ -39,9 +45,13 @@ def test_presentation_edits_preserve_forward_cache_but_execution_edits_invalidat
     progress.write_text("splash = 'solar flare'\n")
     entrypoint.write_text("port = 8001\n")
     publication.write_text("threads = 16\n")
+    benchmark.write_text("event = 'resident_error'\n")
     assert root() == original
+    recipe.write_text("projection = 2\n")
+    changed_recipe = root()
+    assert changed_recipe != original
     backend.write_text("backend = 2\n")
     changed = root()
-    assert changed != original
+    assert changed != changed_recipe
     operator.write_text("kernel = 2\n")
     assert root() != changed

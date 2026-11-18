@@ -7,6 +7,7 @@
 import hashlib
 import importlib
 import inspect
+import json
 import operator
 import os
 import pickle
@@ -406,11 +407,13 @@ def _execute(forward):
     return forward()
 
 
-def aot_forward(forward, *, options=None):
+def aot_forward(forward, *, options=None, kernel_selections=None, algorithm_output=None):
     runtime_patches.apply()
     options = dict(_OPTIONS if options is None else options)
     sources = r'.*\.(?:_?handle|stream_handle|launch_order|plans\[\d+\])$'
-    with _guard_serialization(), torch.compiler.config.patch(unbacked_sources=sources):
+    from .compiler_choices import algorithm_choices
+
+    with algorithm_choices(kernel_selections, output=algorithm_output), _guard_serialization(), torch.compiler.config.patch(unbacked_sources=sources):
         return torch.compile(_execute, backend=partial(StorageBackend, options=options), fullgraph=True,
                              dynamic=False).aot_compile(((forward,), {}))
 
@@ -435,6 +438,7 @@ class BoundForward:
     owner: object
     cache_hit: bool
     pending: object = None
+    algorithm_choices: dict | None = None
 
     def __call__(self):
         return self.artifact(self.owner)
@@ -477,8 +481,10 @@ def _completed(pending):
         wait([item[-2].pending for item in pending], return_when=FIRST_COMPLETED)
 
 
-# Command-line, planning, display, and diagnostic direct-execution sources do not change compiled forwards.
-_COMMAND_SOURCES = ('cli', 'direct', 'errors.py', 'planning.py', 'progress.py')
+# Command-line, benchmark orchestration, planning, display, and diagnostic direct
+# execution do not define compiled tensor operations. Their forward objects and
+# signatures still pass the same artifact binding checks.
+_COMMAND_SOURCES = ('bench', 'cli', 'direct', 'errors.py', 'planning.py', 'progress.py')
 # Nor does writing and signing the package file after preparation.
 _PUBLICATION_SOURCES = ('preparation/model_package.py', 'preparation/package_file.py', 'preparation/protection.py')
 
@@ -566,7 +572,7 @@ class ForwardCache:
     """Load complete compiled forwards before tracing the serving catalog."""
 
     def __init__(self, *, namespace, device, root=None, headroom_bytes=0, options=None, compile_workers=None,
-                 lock_gpu_clocks=False):
+                 lock_gpu_clocks=False, kernel_selections=None, record_kernel_selections=None):
         runtime_patches.apply()
         import flashinfer
         from torch._inductor.codecache import torch_key
@@ -575,11 +581,20 @@ class ForwardCache:
         self.headroom_bytes = headroom_bytes
         self.compile_workers = compile_workers
         self.lock_gpu_clocks = lock_gpu_clocks
+        self.kernel_selections = kernel_selections
+        self.record_choices = kernel_selections is not None or record_kernel_selections is not None
         self.options = MappingProxyType(dict(_OPTIONS if options is None else options))
+        if self.record_choices:
+            from .compiler_choices import FIXED_OPTIONS
+
+            self.options = MappingProxyType(dict(self.options, **FIXED_OPTIONS))
         properties = torch.cuda.get_device_properties(device)
         options = {name: value for name, value in self.options.items() if name != 'compile_threads'}
         key = hashlib.sha256(pickle.dumps((namespace, options, torch_key(), runtime_patches.identity(),
             properties.name, properties.major, properties.minor, properties.multi_processor_count)))
+        if kernel_selections is not None:
+            key.update((Path(kernel_selections) / "inductor.json").read_bytes())
+            key.update((Path(kernel_selections) / "algorithms.json").read_bytes())
         for source in (Path(__file__).resolve().parents[1], Path(flashinfer.__file__).resolve().parent):
             for path in sorted(source.rglob('*.py')):
                 if source.name == 'ignition' and (path.name == '__main__.py'
@@ -707,10 +722,12 @@ class ForwardCache:
         if coordinator is not None:
             return self._prepare_ranks(functions, signatures, coordinator, progress=progress,
                                        materialize=materialize, warmup=warmup, before_run=before_run)
-        selections = InductorSelections(self.device, lock_gpu_clocks=self.lock_gpu_clocks)
+        selections = InductorSelections(self.device, lock_gpu_clocks=self.lock_gpu_clocks,
+                                        kernel_selections=self.kernel_selections)
         compiled, paths, pending = {}, {}, []
         with phase(progress, "Compile model forwards", total=len(functions)) as stage, CompilePool(self.device,
-                headroom_bytes=self.headroom_bytes, options=self.options, compile_workers=self.compile_workers) as compiler:
+                headroom_bytes=self.headroom_bytes, options=self.options, compile_workers=self.compile_workers,
+                kernel_selections=self.kernel_selections, record_choices=self.record_choices) as compiler:
             def finish():
                 name, bound, path = _completed(pending)
                 try:
@@ -727,7 +744,7 @@ class ForwardCache:
                                                        before_run=None if before_run is None else lambda name=name: before_run(name))
                             compiled[name].prepare_capture()
                             selections.release(compiled[name])
-                            release_unused()
+                            release_unused(generation=0)
                         else:
                             paths[name] = path
                 except Exception as error:
@@ -754,13 +771,15 @@ class ForwardCache:
                             bound = self._load(forward, paths[name], required=True,
                                                before_run=None if before_run is None else lambda name=name: before_run(name))
                         except BindingMismatch:
-                            bound = BoundForward(aot_forward(forward, options=self.options), forward, False)
+                            bound = BoundForward(aot_forward(forward, options=self.options,
+                                kernel_selections=self.kernel_selections,
+                                algorithm_output=paths[name].with_suffix('.algorithms.json') if self.record_choices else None), forward, False)
                         compiled[name] = self._warm(bound, paths[name], name=name, progress=None,
                                                    selections=selections, warmup=warmup,
                                                    before_run=None if before_run is None else lambda name=name: before_run(name))
                         compiled[name].prepare_capture()
                         selections.release(compiled[name])
-                        release_unused()
+                        release_unused(generation=0)
                     stage.update(advance=1)
         release_unused()
         return compiled
@@ -799,7 +818,8 @@ class ForwardCache:
             try:
                 compiler = compiler_scope.enter_context(CompilePool(
                     self.device, headroom_bytes=self.headroom_bytes, pools=coordinator.local_ranks,
-                    options=self.options, compile_workers=self.compile_workers))
+                    options=self.options, compile_workers=self.compile_workers,
+                    kernel_selections=self.kernel_selections, record_choices=self.record_choices))
             except MemoryError as failure:
                 # A rank whose GPU has no room for a compiler lends its forwards to the others on this host.
                 unavailable = f"{type(failure).__name__}: {failure}"
@@ -923,7 +943,7 @@ class ForwardCache:
         if any(errors):
             raise RuntimeError(f"compiled forward materialization failed: {errors}")
         selections = InductorSelections(self.device, coordinator=coordinator,
-                                        lock_gpu_clocks=self.lock_gpu_clocks)
+                                        lock_gpu_clocks=self.lock_gpu_clocks, kernel_selections=self.kernel_selections)
         published, released = [], 0
         with phase(progress, "Load and warm compiled forwards", total=len(functions)) as stage:
             for name, forward in functions.items():
@@ -960,12 +980,15 @@ class ForwardCache:
                         published.append(path)
                     released += bound.prepare_capture()
                     selections.release(bound)
-                    release_unused()
+                    # Retained model/guard objects need not be rescanned for every
+                    # forward. Low host headroom still forces a complete collection.
+                    release_unused(generation=0)
                 except Exception as error:
                     failure = f"{name}: {type(error).__name__}: {error}"
                 selections._check(failure)
                 stage.update(advance=1)
             stage.update(f"{released >> 20} MiB portable state released; guards and kernel owners retained")
+        release_unused()
         if coordinator.spans_hosts:
             _share_artifacts(selections._gather(published), group, ranks)
         return selected
@@ -990,7 +1013,10 @@ class ForwardCache:
                 before_run()
             artifact(forward)
         except _BindingsChecked:
-            return BoundForward(artifact, forward, True)
+            choices = None
+            if self.record_choices:
+                choices = json.loads(path.with_suffix('.algorithms.json').read_text())["choices"]
+            return BoundForward(artifact, forward, True, algorithm_choices=choices)
         except BindingMismatch:
             if required:
                 raise
@@ -1008,6 +1034,8 @@ class ForwardCache:
         """The cached forward bound to `forward`, or None when it is missing or its guards reject it, and its path."""
         path = self._path(forward, name=name, signature=signature)
         if not path.is_file():
+            return None, path
+        if self.record_choices and not path.with_suffix('.algorithms.json').is_file():
             return None, path
         if report is not None:
             report("restoring compiled forward")
@@ -1032,7 +1060,11 @@ class ForwardCache:
         report("tracing and compiling forward")
         if compiler is not None:
             return BoundForward(None, forward, False, compiler.submit(forward, path)), path
-        return BoundForward(aot_forward(forward, options=self.options), forward, False), path
+        artifact = aot_forward(forward, options=self.options, kernel_selections=self.kernel_selections,
+            algorithm_output=path.with_suffix('.algorithms.json') if self.record_choices else None)
+        choices = (json.loads(path.with_suffix('.algorithms.json').read_text())["choices"]
+                   if self.record_choices else None)
+        return BoundForward(artifact, forward, False, algorithm_choices=choices), path
 
     def _warm(self, bound, path, *, name, progress=None, selections=None, warmup=nullcontext,
               before_run=None):
@@ -1043,7 +1075,8 @@ class ForwardCache:
         from .inductor_tuning import InductorSelections
 
         if selections is None:
-            selections = InductorSelections(self.device, lock_gpu_clocks=self.lock_gpu_clocks)
+            selections = InductorSelections(self.device, lock_gpu_clocks=self.lock_gpu_clocks,
+                                            kernel_selections=self.kernel_selections)
         path.parent.mkdir(parents=True, exist_ok=True)
         if not hasattr(bound.artifact._artifacts.compiled_fn.artifact, '_flare_graph'):
             bound.artifact.save_compiled_function(str(path))

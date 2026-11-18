@@ -39,6 +39,55 @@ class ArithmeticForward:
         self.sums.copy_(self.rows.sum(dim=1))
 
 
+class BmmForward(ArithmeticForward):
+    def __init__(self):
+        super().__init__()
+        self.a = torch.ones((6, 8, 64), dtype=torch.bfloat16, device='cuda')
+        self.b = torch.ones((6, 64, 64), dtype=torch.bfloat16, device='cuda')
+
+    def __call__(self):
+        self.output.copy_(torch.bmm(self.a, self.b).reshape(-1))
+        self.sums.copy_(self.rows.sum(dim=1))
+
+
+@torch.no_grad()
+@pytest.mark.parametrize('forward_type', [ArithmeticForward, BmmForward])
+def test_recorded_configurations_rebuild_without_benchmarking(tmp_path, monkeypatch, forward_type):
+    from torch._inductor.async_compile import CompiledTritonKernels
+    from torch._inductor.codecache import PyCodeCache
+    from torch._inductor.runtime.triton_heuristics import CachingAutotuner
+    from torch._inductor.select_algorithm import AlgorithmSelectorCache
+
+    device = torch.device('cuda', torch.cuda.current_device())
+    signature = GraphSignature('speculative', 1, 8)
+    namespace = {'model': 'fixed-source-configurations'}
+    control = ForwardCache(namespace=namespace, device=device, root=tmp_path / 'control', compile_workers=1,
+                           record_kernel_selections=tmp_path / 'choices')
+    forward = forward_type()
+    bound = control.prepare(forward, name='round', signature=signature)
+    expected = forward.output.clone(), forward.sums.clone()
+    choices = tmp_path / 'choices'
+    choices.mkdir()
+    inductor_tuning.write_configurations({'round': bound}, device, choices / 'inductor.json')
+    CompiledTritonKernels.cache_clear()
+    PyCodeCache.cache_clear()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('fixed source configuration attempted to benchmark')
+
+    monkeypatch.setattr(CachingAutotuner, 'bench', forbidden)
+    monkeypatch.setattr(AlgorithmSelectorCache, 'autotune', forbidden)
+    rebuild = ForwardCache(namespace=namespace, device=device, root=tmp_path / 'rebuilt',
+                           compile_workers=1, kernel_selections=choices)
+    fresh = forward_type()
+    rebuilt = rebuild.prepare(fresh, name='round', signature=signature)
+    assert not rebuilt.cache_hit
+    torch.testing.assert_close(fresh.output, expected[0], rtol=0, atol=0)
+    torch.testing.assert_close(fresh.sums, expected[1], rtol=0, atol=0)
+    inductor_tuning.write_configurations({'round': rebuilt}, device, choices / 'rebuilt.json')
+    assert (choices / 'inductor.json').read_bytes() == (choices / 'rebuilt.json').read_bytes()
+
+
 class VariantArithmeticForward(ArithmeticForward):
     def __init__(self, rank):
         super().__init__()

@@ -6,6 +6,7 @@
 
 import os
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 from ignition import planning
 from ignition.errors import FetchError, UsageError
@@ -46,12 +47,13 @@ def derive(configuration: Configuration, model: ResolvedModel, host: Host, *, gp
            concurrency: Setting, speculation: Speculation | None, prefill_chunk: int | None = None,
            context_parallel: bool = True, stream_overlap: bool = True, roce_ring: bool = False, roce_chain: bool = False,
            mixed_prefill: bool = False, prompt_logprobs: bool = False, expert_scale_compression: str | None = None,
-           online_mxfp8: bool = False, language_model_only: bool = False,
+           online_mxfp8: bool = False, online_mxfp8_scope: str | None = None, language_model_only: bool = False,
            compile_workers: int | None = None, tuning_gpus: str | None = None, autotune_effort: str | None = None, collective_tuning: str | None = None, collective_ladder=None,
            image_concurrency: int | None = None, mla_compute_mode: str | None = None,
            lock_gpu_clocks: bool = False, native_dense_activations: bool = False,
            joint_tuning: bool = False, shard_hyperconnections: bool = False,
-           force_moe_decode_a16: bool | None = None) -> planning.Plan:
+           force_moe_decode_a16: bool | None = None, kernel_selections: Path | None = None,
+           compiler_selections: Path | None = None, record_kernel_selections: Path | None = None) -> planning.Plan:
     """Select GPUs and estimate memory for one checkpoint from the configuration and command-line intent."""
     from ignition.preparation.collective_ladder import resolve as resolve_ladder
 
@@ -64,9 +66,12 @@ def derive(configuration: Configuration, model: ResolvedModel, host: Host, *, gp
         prefill_chunk=prefill_chunk, context_parallel=context_parallel, stream_overlap=stream_overlap, roce_ring=roce_ring, roce_chain=roce_chain,
         mixed_prefill=mixed_prefill, prompt_logprobs=prompt_logprobs, expert_scale_compression=expert_scale_compression,
         image_concurrency=image_capacity_setting(configuration, model, image_concurrency),
-        online_mxfp8=online_mxfp8, language_model_only=language_model_only, mla_compute_mode=mla_compute_mode)
+        online_mxfp8=online_mxfp8, online_mxfp8_scope=online_mxfp8_scope, language_model_only=language_model_only, mla_compute_mode=mla_compute_mode)
     result = replace(result, compile_workers=workers, hub_cache=configuration.directory("hub_cache"),
                      autotune_effort=tuning_effort(configuration, autotune_effort),
+                     kernel_selections=None if kernel_selections is None else kernel_selections.resolve(strict=True),
+                     compiler_selections=None if compiler_selections is None else compiler_selections.resolve(strict=True),
+                     record_kernel_selections=record_kernel_selections,
                      collective_tuning=mode, collective_ladder=ladder,
                      force_moe_decode_a16=configuration.get("preparation.force_moe_decode_a16", force_moe_decode_a16).value,
                      joint_tuning=joint_tuning, shard_hyperconnections=shard_hyperconnections,
@@ -215,7 +220,8 @@ def speculation(args, model: ResolvedModel, configuration: Configuration | None 
     return Speculation(drafts, adaptive, token_capacity=capacity, packed_verification=packed,
                        draft_prefix_selection=prefix_selection, graph_budget=budget,
                        draft_head_quantization=draft_head, markov_head_quantization=markov_head,
-                       vocabulary_parallel_sampling=getattr(args, "vocabulary_parallel_sampling", False), method=method)
+                       vocabulary_parallel_sampling=getattr(args, "vocabulary_parallel_sampling", False),
+                       replicated_markov=getattr(args, "replicated_markov", False), method=method)
 
 
 def fetch(model: ResolvedModel, hub_cache, *, progress_bars: bool = True) -> str:

@@ -215,6 +215,12 @@ def _preparation_arguments(running, *, model_default="defaults.model"):
                           help="kernel search effort: off uses heuristics without races; default races"
                                " the pruned candidate set; audit lifts the performance exclusions to"
                                " check that pruning drops no winners (default: default)")
+    advanced.add_argument("--kernel-selections", type=Path, metavar="DIRECTORY",
+                          help="Kimi: require exact recorded b12x selections; missing choices fail instead of retuning")
+    advanced.add_argument("--compiler-selections", type=Path, metavar="DIRECTORY",
+                          help="Kimi: compile Inductor kernels with the exact configurations in DIRECTORY/inductor.json")
+    advanced.add_argument("--record-kernel-selections", type=Path, metavar="DIRECTORY",
+                          help="Kimi: save b12x and Inductor choices for the prepared catalog in a new directory")
     advanced.add_argument("--collective-ladder", type=Path,
                           help="JSON file of final joint collective choices; required for runtime tuning")
     advanced.add_argument("--collective-tuning", choices=("static", "runtime"),
@@ -247,9 +253,16 @@ def _preparation_arguments(running, *, model_default="defaults.model"):
     advanced.add_argument("--online-mxfp8", action="store_true",
                           help="store the recipe's eligible BF16 projections as MXFP8 while loading"
                                " (Kimi K3 KDA, MLA except batched key/value, shared"
-                               " experts, MoE latent projections, and DSpark draft context, outputs and MLPs;"
+                               " experts, MoE latent projections, and DSpark linear projections;"
                                " Qwen3.8 dense target attention/MLPs and DFlash2 context, attention and MLPs; Flash Next DFlash2 projections;"
                                " default: checkpoint precision)")
+    advanced.add_argument("--online-mxfp8-scope", choices=("all", "kda-input", "draft"),
+                          help="projection group converted by --online-mxfp8; all converts every eligible"
+                               " projection (default), kda-input converts only fused Kimi KDA inputs,"
+                               " draft converts only the attached DSpark draft")
+    advanced.add_argument("--replicated-markov", action="store_true",
+                          help="replicate the Markov head on every rank for the fused C1 sampler instead of"
+                               " gathering vocabulary shards; requires C1")
     advanced.add_argument("--language-model-only", action="store_true",
                           help="prepare no vision encoder and reject images; its weights and scratch become KV"
                                " pages (recipes with a separable encoder; default: the recipe's image support)")

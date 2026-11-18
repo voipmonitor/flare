@@ -1001,30 +1001,46 @@ of two; key scales use `max(absmax, 1e-4) / 448` in FP32.
 MLA query/KV normalization and indexer LayerNorm use the checkpoint's
 `rms_norm_eps` value of `1e-5`.
 
+Prefill capacities of at least 4096 tokens stage each layer's visible latent
+history through fixed peer buffers before reading selected records locally.
+The transfer preserves owner-cache bytes, selection order and BF16 attention
+queries. At a 1,048,576-token context limit, it adds 36 MiB of shared staging
+and 576 MiB of local history storage per rank. Smaller prefill capacities still
+read peer KV pools directly, so this does not remove their startup mappings.
+TP16 component checks cover exact record bytes and selected order, unchanged
+BF16 attention outputs, empty and partial rows, changing histories through
+1,048,576 tokens, and queued compiled replay. Native package performance remains
+unqualified. Reproduce the component checks with
+`tests/recipes/test_kimi31_staged_prefill_cuda.py`; `python -m
+qualify.kimi_staged_prefill --output PATH` measures the paired complete transfer,
+selected-gather and attention paths on sixteen explicitly assigned idle GPUs.
+
 Kimi K3.1 Pro uses the
-[`Inferact/Kimi-K3.1-Pro-DSpark-preview`](https://huggingface.co/Inferact/Kimi-K3.1-Pro-DSpark-preview)
-draft at revision `6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94`, downloaded into the
-Hugging Face cache. A target checkpoint may carry the same draft format in its
+[`Inferact/Kimi-K3.1-Pro-DSpark`](https://huggingface.co/Inferact/Kimi-K3.1-Pro-DSpark)
+draft at revision `e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f`, downloaded into the
+Hugging Face cache. A target checkpoint may carry a supported Inferact draft in its
 `dspark/` directory. Kimi K3's Red Hat draft is incompatible. Export with
 `--no-mtp` to omit draft weights and state. Images are enabled unless
-`--language-model-only` is selected. The export command uses online MXFP8
-projection conversion to leave more memory for preparation and serving caches.
+`--language-model-only` is selected. The following command preserves target and
+draft checkpoint precision; `--online-mxfp8` explicitly enables the optional
+projection conversion.
 
 ```sh
 ulimit -Sn 65536
 .venv/bin/ignition export kimi-k3.1-pro --gpus 0-15 \
-  --max-concurrency 8 --speculative-token-capacity 64 \
-  --online-mxfp8 --autotune-effort default --compile-workers 16
-.venv/bin/ignition convert CACHE_ENTRY --form packed --output /data/flare-runtime/kimi-k3.1-pro-tp16-c8-images-dspark.safetensors
+  --max-concurrency 1 --image-concurrency 1 --prefill-chunk-size 2048 \
+  --mtp-draft-tokens 7 --speculative-token-capacity 32 \
+  --speculative-graph-budget 16 --autotune-effort default --compile-workers 16
+.venv/bin/ignition convert CACHE_ENTRY --form packed --output /data/flare-runtime/kimi-k3.1-pro-tp16-c1-images-dspark.safetensors
 
 ./flare/target/release/flare run \
-  /data/flare-runtime/kimi-k3.1-pro-tp16-c8-images-dspark.safetensors \
+  /data/flare-runtime/kimi-k3.1-pro-tp16-c1-images-dspark.safetensors \
   --gpus 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 ```
 
-Forward compilation is enabled. The 64-token speculative capacity accommodates
-eight requests at verification width eight, including each pending token.
-The separate packed speculative graph budget defaults to 64.
+Forward compilation is enabled. The 32-token speculative capacity exceeds one
+request's verification width of eight, including the pending token. The packed
+speculative graph budget is 16.
 
 Each sparse-attention layer stores 128 E4M3 latent records and 128 index records
 per local page. Each index record contains 128 E4M3 values and one FP32 scale;
@@ -1036,28 +1052,39 @@ pages, and the final normalized hidden vector. The declaration's weight estimate
 uses Kimi K3's matching target layouts plus replicated indexer weights. Graph
 memory remains a preparation planning allowance until graphs are captured.
 
-Inferact's five-layer draft uses causal full-context MLA, even though the target
-uses sparse attention. It consumes the residual block sums after zero-based
-target layers 75, 79, 83, 87, and 91. These differ from the learned AttnRes
-mixtures used by Kimi K3's draft. The target supplies the embedding and vocabulary
-head. Seven proposal positions contain the pending token followed by masks;
-the rank-512 Markov head conditions each sampled proposal on the preceding token.
-The confidence head is not executed; serving chooses among the prepared target
-verification widths using observed costs and acceptance.
+Inferact's five-layer draft uses causal Qwen3 attention with 96 query heads,
+16 key/value heads and head width 64. Every layer attends to a 2,048-token
+sliding window. The draft consumes learned AttnRes mixtures entering one-based
+target layers 76, 80, 84, 88 and 92, before input normalization. The target
+supplies the embedding and vocabulary head; the draft checkpoint does not store
+either tensor. Seven proposal positions contain the pending token followed by
+masks, and the rank-512 Markov head conditions each sampled proposal on the
+preceding token. The confidence head is not executed; serving chooses among the
+prepared target verification widths using observed costs and acceptance.
 
-Draft RoPE uses interleaved YaRN with factor 32, theta 1,000,000, and the original
-32,768-position range. The checkpoint's explicit `attn_factor` cancels its YaRN
-cosine/sine magnitude gain. The rotary gain is therefore one. Implementations
-that omit `attn_factor` do not have the same rotary arithmetic.
+Draft RoPE uses rotate-half pairing with theta 10,000. Each draft layer retains
+2,048 BF16 keys and values per local key/value head and continuation row. Only
+accepted target features update these windows; rejected proposals leave the
+committed windows unchanged. With seven drafts, logical target pages use
+2,174,976 bytes per rank and continuation rows use 35,122,432 bytes, including
+KDA verification history and all ten draft key/value windows. The draft adds no
+full-context pages. Prefix snapshots preserve the complete draft windows.
+Loading a draft package with `--mtp-draft-tokens 0` selects its ordinary
+generation graphs.
 
-Each draft layer stores accepted target context as 1,152-byte BF16 latent records,
-interleaved across the sixteen context ranks. Proposal records use separate
-scratch pages and causal attention; they never require speculative suffix pages
-in the persistent draft cache. Only accepted target features populate that cache.
-With seven drafts, logical pages use 2,912,256 bytes per rank and continuation
-rows use 33,238,272 bytes, including KDA verification history and partial draft
-pages. Prefix snapshots preserve the complete draft history. Loading a draft
-package with `--mtp-draft-tokens 0` selects its ordinary generation graphs.
+To convert only the DSpark draft, use
+`--online-mxfp8 --online-mxfp8-scope draft`. This stores its context, QKV,
+context K/V, attention-output and MLP projections as MXFP8 without changing any
+target weight. `--draft-head-quantization nvfp4` prepares a separate NVFP4
+proposal head while the target verification head remains BF16.
+`--markov-head-quantization fp8` stores the Markov projection as row-scaled E4M3
+with FP32 scales; the replicated Markov embedding remains BF16. For C1,
+`--replicated-markov` additionally replicates that FP8 projection on every rank,
+allowing the fused proposal sampler to avoid a full-vocabulary gather after each
+sampled token. These options change proposal arithmetic and require separate
+acceptance and performance measurements. Adaptive verification remains the default;
+`--no-mtp-adaptive-verification` selects fixed-width serving from the same
+package.
 
 Serving defaults follow the
 [model card](https://huggingface.co/moonshotai/Kimi-K3.1-Pro#3-evaluation-results):

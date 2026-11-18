@@ -38,11 +38,14 @@ class StateSnapshot:
 class _RankBenchmark:
     def __init__(self, model):
         from ignition.direct.executor import StepRunner
+        from .resident import ModelView
 
         if not getattr(model, "benchmark_state", None):
             raise ValueError("model preparation did not declare complete benchmark state")
-        self.runner = StepRunner(model, eager=False)
+        self.runner = StepRunner(ModelView(model), eager=False)
         self.snapshot = None
+        self.variant = None
+        self.reference = None
 
     def execute(self, command):
         import torch
@@ -70,9 +73,63 @@ class _RankBenchmark:
         elif operation == "close":
             runner.close()
             self.snapshot = None
+            self.reference = None
+            if self.variant is not None:
+                self.variant.close()
+                self.variant = None
+        elif operation == "recapture":
+            from .resident import CapturedVariant
+
+            if self.snapshot is not None:
+                raise RuntimeError("finish the restored measurement before recapturing")
+            self.use_baseline()
+            if self.variant is not None:
+                self.variant.close()
+                self.variant = None
+            self.variant = CapturedVariant(runner, command)
+            return self.variant.report
+        elif operation == "select_variant":
+            if self.variant is None:
+                raise RuntimeError("no captured variant is available")
+            runner.model.graphs.update(self.variant.graphs)
+            runner.model.benchmark_rounds.update(self.variant.forwards)
+        elif operation == "baseline":
+            self.use_baseline()
+        elif operation == "reset":
+            runner.close()
+            if self.snapshot is not None:
+                self.snapshot.restore(runner.stream)
+                runner.stream.synchronize()
+            self.snapshot = self.reference = None
+            self.use_baseline()
+        elif operation == "status":
+            import os
+
+            return dict(pid=os.getpid(), device=str(runner.device),
+                        allocated_bytes=torch.cuda.memory_allocated(runner.device),
+                        free_bytes=torch.cuda.mem_get_info(runner.device)[0],
+                        graphs=list(runner.model.graphs),
+                        tuning=runner.model.memory_report.get("tuning"))
+        elif operation == "save_reference":
+            self.reference = StateSnapshot(runner.model.benchmark_state, runner.stream)
+        elif operation == "compare_reference":
+            if self.reference is None:
+                raise RuntimeError("no reference state is available")
+            runner.stream.synchronize()
+            different = [name for name, (tensor, saved) in self.reference.entries.items()
+                         if not torch.equal(tensor.contiguous().view(torch.uint8),
+                                            saved.contiguous().view(torch.uint8))]
+            return dict(equal=not different, different_tensors=different)
+        elif operation == "release_reference":
+            self.reference = None
         else:
             raise ValueError(f"unknown benchmark rank operation {operation!r}")
         return {}
+
+    def use_baseline(self):
+        self.runner.stream.synchronize()
+        self.runner.model.graphs = dict(self.runner.model.base.graphs)
+        self.runner.model.benchmark_rounds = dict(self.runner.model.base.benchmark_rounds or {})
 
 
 class BenchmarkExecutor:
@@ -90,6 +147,7 @@ class BenchmarkExecutor:
                 prepared.supervisor.abort("benchmark rank startup failed")
             raise
         self.device, self.stream = self.local.runner.device, self.local.runner.stream
+        self.model = getattr(self.local.runner, "model", self.model)
         self.closed = False
 
     def _exchange(self, command):

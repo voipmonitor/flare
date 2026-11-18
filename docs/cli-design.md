@@ -245,6 +245,126 @@ the requested speculative rounds and the initialization and prefill graphs
 needed to establish their contexts. Vision weights retain their configured
 residency, while image graphs are omitted from this text benchmark.
 
+#### Resident Kimi graph iteration
+
+`--resident DIRECTORY` keeps Kimi's weights, state buffers, selected operators,
+and sixteen rank processes alive after the initial measurement. The directory
+must not exist. Subsequent JSON commands on standard input measure another
+round or capture a source-defined replacement without exporting or loading
+weights again. Graph latency remains a diagnostic measurement; qualify model
+acceptance and serving throughput through an exported package.
+
+Record the initial catalog's kernel choices and start a resident session:
+
+```sh
+.venv/bin/ignition bench kimi-k3.1-pro --gpus 0-15 \
+  --max-concurrency 1 --image-concurrency 1 --prefill-chunk-size 2048 \
+  --mtp-draft-tokens 7 --verify-width 8 --speculative-token-capacity 32 \
+  --online-mxfp8 --online-mxfp8-scope all --draft-head-quantization nvfp4 \
+  --markov-head-quantization fp8 --replicated-markov \
+  --batches 1 --contexts 512 --seeds 0 --warmup 2 --repetitions 8 \
+  --autotune-effort default --collective-tuning static --compile-workers 16 \
+  --record-kernel-selections /tmp/kimi31-selections \
+  --resident /tmp/kimi31-rounds
+```
+
+After `resident_ready`, enter one command per line:
+
+```json
+{"operation":"measure","label":"repeat"}
+{"operation":"recapture","graph":"speculative1x8-tokens8"}
+{"operation":"compare"}
+{"operation":"measure","label":"recaptured"}
+{"operation":"baseline"}
+{"operation":"recapture","graph":"speculative1x8-tokens8","module":"tools.kimi31_resident_identity","parameters":{}}
+{"operation":"compare"}
+{"operation":"measure","label":"source_rebuild"}
+{"operation":"recapture","graph":"speculative1x8-tokens8","module":"tools.kimi31_markov_graph","parameters":{"num_warps":8}}
+{"operation":"compare"}
+{"operation":"measure","label":"markov_warps8"}
+{"operation":"baseline"}
+{"operation":"measure","label":"control"}
+{"operation":"variant"}
+{"operation":"measure","label":"markov_warps8_repeat"}
+{"operation":"quit"}
+```
+
+Without `module`, recapture reuses the already compiled forward. With `module`,
+the Python source must provide `build(model, graph_name, parameters)` returning
+`ignition.bench.resident.RoundVariant`. It constructs a complete speculative
+round with the existing input, completion, and persistent-state contract.
+The identity example recompiles that contract without changing computation.
+Only the selected round compiles and captures; the target weights remain resident.
+Use a distinct importable module name for each source revision. Builders must
+leave baseline objects and weight tensors unchanged, retain additional resource
+owners, and express all choices through their source and JSON parameters.
+
+`tools.kimi31_markov_graph` clones the retained graph and replaces only its seven
+Markov proposal kernels with source-compiled kernels using the requested warp
+count. It preserves the kernel argument layout and grid, validates the dependency
+chain, and keeps the original graph and its storage alive. It does not recompile
+the target forward. Other source changes can use the complete-round compilation
+path. The example is a diagnostic variant, not a qualified model optimization.
+
+`compare` restores identical inputs and RNG state and compares every rank's
+declared mutable state byte for byte after baseline and variant replay. A false
+result requires investigation; it is not an accepted optimization. Arithmetic
+changes also need operator-specific numerical validation. `baseline` switches
+back to the retained graph; `variant` selects the captured candidate again without
+rebuilding it. The next recapture retires the previous candidate
+after draining it. EOF or `quit` drains and closes the entire rank group.
+
+The directory contains the startup configuration, raw measurements, exact
+variant source digests and parameters, `inductor.json` launch configurations,
+and replayable `commands.jsonl`. Copy the launch command and preserve its source
+revision and dependency versions along with these inputs. Replaying the commands
+starts with the automatic baseline measurement; it does not require the previous
+process. Changed source bytes are rejected when they differ from the recorded
+digest. No executable source is written into the model package.
+
+Kimi preparation accepts three advanced options, including on `ignition export`:
+
+| Flag | Behavior | Default |
+|---|---|---|
+| `--record-kernel-selections DIRECTORY` | Save the prepared catalog's b12x selections and Inductor launch configurations in a new directory | unset |
+| `--kernel-selections DIRECTORY` | Require matching b12x query and program identities; a missing choice fails instead of starting a tuning race | ordinary selection cache and tuning |
+| `--compiler-selections DIRECTORY` | Select exact matrix algorithms from `algorithms.json` and generated-kernel parameters from `inductor.json`; missing choices or incompatible toolchains/devices fail | ordinary Inductor tuning and cache |
+
+Reproduce the recorded session in a fresh process:
+
+```sh
+.venv/bin/ignition bench kimi-k3.1-pro --gpus 0-15 \
+  --max-concurrency 1 --image-concurrency 1 --prefill-chunk-size 2048 \
+  --mtp-draft-tokens 7 --verify-width 8 --speculative-token-capacity 32 \
+  --online-mxfp8 --online-mxfp8-scope all --draft-head-quantization nvfp4 \
+  --markov-head-quantization fp8 --replicated-markov \
+  --batches 1 --contexts 512 --seeds 0 --warmup 2 --repetitions 8 \
+  --autotune-effort default --collective-tuning static --compile-workers 16 \
+  --kernel-selections /tmp/kimi31-selections \
+  --compiler-selections /tmp/kimi31-selections \
+  --resident /tmp/kimi31-reproduced < /tmp/kimi31-rounds/commands.jsonl
+```
+
+These tables
+contain configurations rather than required compiled binaries. b12x and generated
+Triton kernels can compile from source. Keep the recorded autotune effort:
+`--autotune-effort off` selects heuristics and does not replay measured choices.
+Recorded compilation fixes matrix implementation choices before code generation
+and launch parameters afterwards. It disables benchmarking of shape padding and
+deferred template selection. Changing an unrelated kernel therefore cannot start
+another matrix-algorithm race. Kernel identities normalize generated symbol names
+and CUDA ordinals while retaining arithmetic, shapes, strides and launch metadata.
+Additional graph shapes or changed kernel sources may need additional explicit
+selections; a table recorded for a three-graph benchmark does not cover an entire
+serving catalog. A retained optimization must also reproduce in a fresh process
+and pass native package validation before its serving speedup is claimed.
+
+`tools.kimi31_markov_source_rebuild` accepts `num_warps` and a fresh `cache` directory.
+It constructs fresh JIT objects and empty per-rank caches, records compiler cache
+hits, and requires every Markov kernel to compile from source before replacing
+graph nodes. Use a new cache path when repeating this diagnostic. Its purpose is
+checking reconstruction without saved binary artifacts.
+
 For fifteen drafts plus the pending token, select `--mtp-draft-tokens 15` or
 `--verify-width 16`. Specifying both requires matching values. This measures the
 native width-sixteen graph, including verification, commit, and completion
@@ -405,7 +525,9 @@ explicit flags take precedence.
 | `--expert-scale-compression [MODE]` | Losslessly compress routed-expert scales: DeepSeek V4.1 backbone and DSpark MXFP4 scales, or Step-5 NVFP4 scales including BF16 experts converted to W4A16. `csf` is a compressed scale encoding expanded during execution. Estimated resident GPU weight savings are 3% for DeepSeek V4.1 and 6% for Step-5; actual savings depend on encoded scales. A bare flag selects `csf`; `native` disables compression. Retain compressed scales and share expansion scratch across serial layers. | Recipe default: `csf` for DeepSeek V4.1, native otherwise |
 | `--speculative-method {mtp,dflash2}` | Select the recipe's learned proposal method. Flash Next defaults to MTP and also supports its pinned DFlash2 checkpoint; Qwen3.8 dense uses DFlash2. Overrides `[models."MODEL"] speculative_method`, then `[defaults] speculative_method`. The selection is recorded in preparation and rebuild metadata; native serving replays the exported graphs. | Recipe declaration |
 | `--no-mtp` | Disable multi-token speculation: load no draft model, keep no verification rows, and decode one token per step. | Speculation on |
-| `--draft-head-quantization {nvfp4,mxfp8}` | Prepare a separate proposal vocabulary head while retaining target-head precision. NVFP4 supports DeepSeek V4/V4.1; MXFP8 supports DeepSeek V4.1. Qwen3.8 dense supports both when the source checkpoint head is BF16, including `qwen3.8-27b-qad`; the packed NVIDIA head cannot be converted through this option. Flash Next supports both with `--speculative-method dflash2` and a BF16 target vocabulary head. This does not quantize the draft body. | Checkpoint precision |
+| `--draft-head-quantization {nvfp4,mxfp8}` | Prepare a separate proposal vocabulary head while retaining target-head precision. NVFP4 supports DeepSeek V4/V4.1; MXFP8 supports DeepSeek V4.1. Qwen3.8 dense supports both when the source checkpoint head is BF16, including `qwen3.8-27b-qad`; the packed NVIDIA head cannot be converted through this option. Flash Next supports both with `--speculative-method dflash2` and a BF16 target vocabulary head. Kimi K3.1 Pro DSpark supports both with its BF16 shared target head. This does not quantize the draft body. | Checkpoint precision |
+| `--markov-head-quantization {nvfp4,fp8}` | Convert the sequential Markov transition head independently of the draft body and proposal head. DeepSeek V4.1 supports NVFP4 and row-scaled FP8; Kimi K3.1 Pro DSpark supports row-scaled FP8 with the prepared Markov sampler. The Markov embedding retains BF16. | Checkpoint precision |
+| `--replicated-markov` | Replicate the Markov projection on every TP rank and use the fused single-request proposal sampler instead of vocabulary-sharded projection followed by full-vocabulary gathers. Requires C1; incompatible with vocabulary-parallel sampling. The Markov embedding and selected projection precision are preserved. | Off (vocabulary-sharded Markov) |
 | `--mtp-draft-tokens N` | Most draft tokens verified in one round; see `MODEL --help` for its limit. Verification capacities cover counts from 0 through `N` within the speculative token capacity. Each complete speculative program records its actual proposal depth independently of target width and aggregate rows. Prefix selection uses measured complete-program cost and completed acceptance or confidence. Zero retains draft state with width-one execution; `--no-mtp` excludes draft weights and state. | Recipe declaration |
 | `--speculative-token-capacity N` | Maximum physical target-token rows in wider speculative graphs; width one covers every request bucket. Applies to every speculative recipe. | 128 except Gemma 4, which derives it from concurrency and draft depth (6 at its defaults) |
 | `--speculative-graph-budget N` | Maximum packed round graphs to capture, independently of physical target-token rows. Excludes mandatory width-one and ordinary graphs; requires packed adaptive learned speculation at positive draft depth. Must cover both physical-row endpoints for every eligible request bucket. | 64 for packed recipes |
@@ -423,7 +545,8 @@ explicit flags take precedence.
 | `--no-compile` | Development only: capture graphs without compiling forwards. A recipe never sets it. | off |
 | `--force-moe-decode-a16` / `--no-force-moe-decode-a16` | Prepare Qwen3.8 Flash NVFP4 target routed experts as one packed weight owner: decode and speculative verification use W4A16 at every token-row count, and separate prefill graphs use calibrated A4. Requires SM120/121, checkpoint activation scales, and rank-local expert intermediate width divisible by 64 (TP1/2). Mixed prefill and other recipes/precisions reject the flag. Shared experts and stored A16 MTP experts retain their precision. Overrides `[preparation] force_moe_decode_a16`; the resolved value is recorded in the plan and package rebuild metadata. | off |
 | `--native-dense-activations` | Replace dense projection `auto` precision with b12x `quantized`: A8 for FP8 weights and A4 for FP4 weights. Explicit recipe precision and routed MoE precision are retained. NVFP4 requires a checkpoint activation global scale; unsupported native paths fail preparation. | Recipe precision |
-| `--online-mxfp8` | Store eligible BF16 projections as MXFP8 while loading. Kimi K3 converts KDA projections, MLA latent/gate, query and output projections, shared experts, MoE latent down/up projections, and DSpark context, outputs and MLPs; batched MLA key/value projections retain BF16. Qwen3.8 dense converts target attention/MLP projections and DFlash2 context, attention and MLP projections. Flash Next with `--speculative-method dflash2` converts only DFlash2 projections; target precision is retained. Existing packed weights, normalization, convolutions, selectors and target vocabulary weights retain their precision. Recipes that name no such projections reject it. | Checkpoint precision |
+| `--online-mxfp8` | Store eligible BF16 projections as MXFP8 while loading. Kimi K3 converts KDA projections, MLA latent/gate, query and output projections, shared experts, MoE latent down/up projections, and DSpark context, outputs and MLPs; batched MLA key/value projections retain BF16. Kimi K3.1's Qwen DSpark also converts QKV and context K/V. Qwen3.8 dense converts target attention/MLP projections and DFlash2 context, attention and MLP projections. Flash Next with `--speculative-method dflash2` converts only DFlash2 projections; target precision is retained. Existing packed weights, normalization, convolutions, selectors and target vocabulary weights retain their precision. Recipes that name no such projections reject it. | Checkpoint precision |
+| `--online-mxfp8-scope all\|kda-input\|draft` | Select the projections converted by `--online-mxfp8`. `all` converts every eligible projection; `kda-input` converts only fused Kimi K3/K3.1 KDA input projections; `draft` converts only the attached Kimi K3.1 Qwen DSpark and retains all target weights at checkpoint precision. Requires `--online-mxfp8`. | `all` |
 | `--language-model-only` | Prepare no vision encoder and serve text only, as vLLM's flag of the same name; requests with images are rejected and the encoder's weights, scratch, and graphs become KV pages. Recipes without a separable encoder reject it. | The recipe's image support |
 
 Speculative token capacity and packed graph budget also accept configuration-file

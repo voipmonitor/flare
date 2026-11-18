@@ -12,11 +12,14 @@ from ignition.components.recurrent import prepare_sequence_binding
 from ignition.components.kda_speculation import _record, register_recording
 
 from .projections import prepare_projection
+from .kda_input import prepare_input_copy
+from .kda_overlap import prepare_forget_overlap
 
 
 class PreparedKDA:
     def __init__(self, weights, source, state, metadata, *, mode, eps, session, name, workspace, buffers, records=None,
                  allocator=None):
+        projection_mode = mode
         mode = "decode" if mode == "verify" else mode
         self.records, self.state, self.metadata = records, state, metadata
         tokens, hidden = source.shape
@@ -41,6 +44,8 @@ class PreparedKDA:
             name=name + "." + key, workspace=workspace) for key, x, y in (
                 ("input", source, self.input), ("forget", self.forget, raw_g),
                 ("output", gated, buffer("output", hidden)))}
+        self.input_copy = prepare_input_copy(self.projections['input'], source, self.forget,
+            mode=projection_mode, session=session, workspace=workspace)
         sequences = metadata.query_start_loc.numel() - 1
         conv_args = dict(x=qkv, conv_weight=weights["convolution"], query_start_loc=metadata.query_start_loc,
             state_slot_ids=metadata.convolution_slots, state_is_fresh=metadata.fresh,
@@ -53,6 +58,8 @@ class PreparedKDA:
         prepare_sequence_binding(plan, conv_args, session=session, name=name + ".conv", mode=mode,
             public_bind=short_conv.bind, bind_plan=True, workspace=workspace,
             set_binding=lambda binding: setattr(self, "convolution", binding))
+        self.forget_overlap = prepare_forget_overlap(source, self.projections['forget'], plan,
+            mode=projection_mode, heads=heads, session=session, workspace=workspace)
         recurrent = state.recurrent if records is None else state.recurrent[:records[0].shape[0]]
         common = dict(raw_g=raw_g.view(tokens, heads, 128), raw_beta=beta, A_log=weights["A_log"],
             dt_bias=weights["dt_bias"].view(heads, 128), recurrent_state=recurrent,
@@ -94,10 +101,18 @@ class PreparedKDA:
 
     def __call__(self, source):
         p = self.projections
-        p["input"](source)
-        self.forget.copy_(self.forget_source)
-        p["forget"](self.forget)
-        short_conv.run(self.convolution)
+        if self.input_copy is not None and self.input_copy.enabled:
+            self.input_copy(source)
+        else:
+            p["input"](source)
+            self.forget.copy_(self.forget_source)
+        if self.forget_overlap is None:
+            p["forget"](self.forget)
+            short_conv.run(self.convolution)
+        else:
+            self.forget_overlap.start(self.forget)
+            short_conv.run(self.convolution)
+            self.forget_overlap.finish(self.forget, self.convolution.out)
         if self.records is not None:
             _record(self.reads, self.gated, *self.records, self.handle)
         elif self.mode == "decode":

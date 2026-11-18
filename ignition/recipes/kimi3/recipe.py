@@ -25,7 +25,10 @@ def prepare(snapshot, plan, *, compile_forwards, kernel_cache, progress, retain_
     if plan.speculation is not None:
         drafting = dict(speculative_widths=plan.speculation.widths, speculative_fixed_width=plan.speculation.fixed_width,
                         speculative_token_capacity=plan.speculative_token_capacity,
-                        speculative_graph_budget=plan.speculation.graph_budget or 64)
+                        speculative_graph_budget=plan.speculation.graph_budget or 64,
+                        draft_head_quantization=plan.speculation.draft_head_quantization,
+                        markov_head_quantization=plan.speculation.markov_head_quantization,
+                        replicated_markov=plan.speculation.replicated_markov)
         if (Path(snapshot) / DRAFT_DIRECTORY).is_dir():
             drafting["draft_checkpoint"] = str(Path(snapshot) / DRAFT_DIRECTORY)
         else:
@@ -43,7 +46,10 @@ def prepare(snapshot, plan, *, compile_forwards, kernel_cache, progress, retain_
         max_active=plan.concurrency, image_concurrency=plan.image_concurrency, prefill_chunk_size=plan.prefill_chunk,
         snapshot_budget_bytes=plan.snapshots * plan.costs.state_row_bytes,
         headroom_bytes=plan.headroom_bytes + plan.reserve_bytes, compile_decoder=compile_forwards,
-        retain_graphs=retain_graphs, kernel_cache=kernel_cache, online_mxfp8=plan.online_mxfp8,
+        retain_graphs=retain_graphs, kernel_cache=kernel_cache, kernel_selections=plan.kernel_selections,
+        compiler_selections=plan.compiler_selections,
+        record_kernel_selections=plan.record_kernel_selections,
+        online_mxfp8=plan.online_mxfp8, online_mxfp8_scope=plan.online_mxfp8_scope,
         stream_overlap=plan.stream_overlap, context_parallel=plan.context_parallel,
         vision=not plan.language_model_only, sampling_defaults=recipe.sampling_defaults.as_dict(),
         frontend_template=str(Path(__file__).parent.parent / recipe.name / "assets" / "chat_template.jinja"),
@@ -78,9 +84,9 @@ RECIPE = Recipe(
     context=1048576, page_tokens=128, concurrency=32, max_concurrency=64, prefill_chunk=4096,
     speculation=Speculation(draft_tokens=7, token_capacity=128, packed_verification=True, graph_budget=64), max_draft_tokens=7, max_images=4, image_bytes=32 << 20,
     verification_rows=0,
-    # KDA, MLA except batched key/value, shared experts, latent MoE projections, and the DSpark
-    # draft's context projection, attention outputs and MLPs may load as MXFP8.
-    online_mxfp8=True,
+    # KDA, MLA except batched key/value, shared experts, latent MoE projections, and eligible DSpark
+    # linear projections may load as MXFP8.
+    online_mxfp8=True, online_mxfp8_scopes=("all", "kda-input"),
     # Decode and verification run each MoE layer's shared experts beside its routing and routed experts.
     stream_overlap=True,
     # Text-only plans, as vLLM serves Kimi K3 with --language-model-only, leave the MoonViT encoder unloaded.

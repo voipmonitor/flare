@@ -118,7 +118,7 @@ def test_recipe_registration_and_sampling_defaults(raw_config, tmp_path):
         "temperature": 1., "top_p": .95, "top_k": -1, "seed": 0, "min_p": 0.,
         "repetition_penalty": 1., "presence_penalty": 0., "frequency_penalty": 0.}
     assert model.recipe.speculation.draft_tokens == model.recipe.max_draft_tokens == 7
-    assert model.checkpoint.draft_bytes == 8_558_149_632
+    assert model.checkpoint.draft_bytes == 7_625_920_512
 
 
 @pytest.mark.parametrize("command", ["export", "debug-serve"])
@@ -135,6 +135,12 @@ def test_cli_draft_defaults_and_explicit_disabling(command):
         "--speculative-token-capacity", "32", "--speculative-graph-budget", "16"])
     chosen = preparation.speculation(args, model)
     assert (chosen.draft_tokens, chosen.token_capacity, chosen.graph_budget) == (3, 32, 16)
+    args = _parser().parse_args([command, model.checkpoint.alias,
+        "--draft-head-quantization", "nvfp4", "--markov-head-quantization", "fp8",
+        "--online-mxfp8", "--online-mxfp8-scope", "draft", "--replicated-markov"])
+    chosen = preparation.speculation(args, model)
+    assert (chosen.draft_head_quantization, chosen.markov_head_quantization) == ("nvfp4", "fp8")
+    assert chosen.replicated_markov
 
 
 @pytest.mark.parametrize("embedded_draft", [False, True])
@@ -185,7 +191,33 @@ def test_preparation_selects_the_inferact_draft(monkeypatch, tmp_path, embedded_
     assert downloaded == ([] if embedded_draft else [(DSPARK_REPOSITORY, DSPARK_REVISION)])
     assert config.draft_checkpoint == str(tmp_path / ("dspark" if embedded_draft else "external"))
     assert config.speculative_widths == tuple(range(1, 9))
-    assert config.snapshot_budget_bytes == plan.snapshots * 33_238_272
+    assert config.snapshot_budget_bytes == plan.snapshots * 35_122_432
+
+
+def test_preparation_selects_draft_only_quantization(monkeypatch, tmp_path):
+    from dataclasses import replace
+    from ignition.recipes import resolve
+    from .test_declarations import fitted
+
+    model = resolve("kimi-k3.1-pro")
+    plan = fitted(model, 16, concurrency=1, online_mxfp8=True, online_mxfp8_scope="draft")
+    plan = replace(plan, speculation=replace(plan.speculation,
+        draft_head_quantization="nvfp4", markov_head_quantization="fp8", replicated_markov=True))
+    (tmp_path / "dspark").mkdir()
+    monkeypatch.setattr("ignition.preparation.rank_group.prepare_group",
+                        lambda snapshot, config, prepare, **kwargs: config)
+    config = model.recipe.prepare(tmp_path, plan, compile_forwards=False, kernel_cache=None, progress=None)
+    assert config.online_mxfp8 and config.online_mxfp8_scope == "draft"
+    assert config.draft_head_quantization == "nvfp4"
+    assert config.markov_head_quantization == "fp8"
+    assert config.replicated_markov
+
+
+def test_replicated_markov_requires_c1(tmp_path):
+    from ignition.recipes.kimi3.bootstrap import PreparationConfig
+
+    with pytest.raises(ValueError, match="only for C1"):
+        PreparationConfig(draft_checkpoint=tmp_path, replicated_markov=True, max_active=2)
 
 
 def test_preparation_rejects_unsharded_context_before_dispatch(tmp_path):

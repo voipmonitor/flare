@@ -58,17 +58,20 @@ from ignition.components.vision_state import PrefillVisionInputs, VisionState
 REDUCE_ROWS = 1024
 
 
-def target_tuning_identity(config, headers, world_size):
+def target_tuning_identity(config, headers, world_size, *, online_mxfp8_scope="all"):
     """Scope kernel selections to target geometry, independently of attached drafts.
 
     The target-only descriptor retains its empty draft field. Each operator's
     encoded query, invocation and candidate programs distinguish additional
     draft shapes and arithmetic contracts inside the selection cache.
     """
-    return hashlib.sha256(json.dumps({
+    value = {
         "config": config.text, "headers": headers, "vision": config.vision,
         "draft": None, "world_size": world_size,
-        "contract": "kimi3.graph-inputs.v1"}, sort_keys=True).encode()).hexdigest()
+        "contract": "kimi3.graph-inputs.v1"}
+    if online_mxfp8_scope != "all":
+        value["online_mxfp8_scope"] = online_mxfp8_scope
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,9 @@ class PreparationConfig:
     compile_decoder: bool = True
     retain_graphs: bool = False
     kernel_cache: Path | None = None
+    kernel_selections: Path | None = None
+    compiler_selections: Path | None = None
+    record_kernel_selections: Path | None = None
     benchmark_selection: BenchmarkSelection | None = None
     # DSpark checkpoint, either external or in the target's dspark directory.
     draft_checkpoint: Path | None = None
@@ -99,8 +105,12 @@ class PreparationConfig:
     speculative_fixed_width: int | None = None
     speculative_token_capacity: int | None = None
     speculative_graph_budget: int = 64
+    draft_head_quantization: str | None = None
+    markov_head_quantization: str | None = None
+    replicated_markov: bool = False
     # Store eligible attention, shared-expert, latent MoE, and DSpark projections as MXFP8.
     online_mxfp8: bool = False
+    online_mxfp8_scope: str = "all"
     # Shared experts overlap routing and routed experts on an auxiliary stream.
     stream_overlap: bool = True
     # Ranks share each page's context (decode context parallel over every rank, KV interleave 1).
@@ -112,6 +122,18 @@ class PreparationConfig:
     frontend_template: str | None = None
 
     def __post_init__(self):
+        if self.online_mxfp8_scope not in ("all", "kda-input", "draft"):
+            raise ValueError("online MXFP8 scope must be all, kda-input or draft")
+        if self.online_mxfp8_scope != "all" and not self.online_mxfp8:
+            raise ValueError("online MXFP8 scope requires online conversion")
+        if self.draft_head_quantization not in (None, "nvfp4", "mxfp8"):
+            raise ValueError("draft head quantization must be omitted, nvfp4 or mxfp8")
+        if self.markov_head_quantization not in (None, "fp8"):
+            raise ValueError("Markov head quantization must be omitted or fp8")
+        if self.replicated_markov and not self.drafting:
+            raise ValueError("replicated Markov requires a DSpark draft")
+        if self.replicated_markov and self.max_active != 1:
+            raise ValueError("replicated Markov is supported only for C1")
         if self.speculative_widths and max(self.speculative_widths) > 8:
             raise ValueError("Kimi K3 draft model supports at most seven draft tokens")
         from ignition.components.capacity import image_capacity
@@ -224,13 +246,18 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
     shard = TensorParallelShard(rank, len(config.devices))
     device = torch.device("cuda", config.devices[rank])
     torch.cuda.set_device(device)
+    if config.record_kernel_selections is not None and Path(config.record_kernel_selections).exists():
+        raise FileExistsError(f"kernel selection output already exists: {config.record_kernel_selections}")
     with phase(progress, "Inspect checkpoint"):
         manifest = inspect_indexed_checkpoint(snapshot)
         headers = [shard.header_sha256 for shard in manifest.shards]
     with package_storage.transient():
         peers = None if group is None or package_storage.peer_storage is None else (group, package_storage.peer_storage)
-        weights = ModelWeights.load(manifest, device, shard=shard, progress=progress, online_mxfp8=config.online_mxfp8,
+        weights = ModelWeights.load(manifest, device, shard=shard, progress=progress, online_mxfp8=config.online_mxfp8, online_mxfp8_scope=config.online_mxfp8_scope,
                                     draft_checkpoint=config.draft_checkpoint, peers=peers,
+                                    draft_head_quantization=config.draft_head_quantization,
+                                    markov_head_quantization=config.markov_head_quantization,
+                                    replicated_markov=config.replicated_markov,
                                     vision=config.vision)
         del manifest
         release_unused()
@@ -272,7 +299,7 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
         if drafting:
             context_collective = create_all_gather_runtime(group, device, max_rows=channel_rows,
                 columns=weights.config.hidden, ipc=package_storage.peer_storage)
-            markov_collective = create_all_gather_runtime(group, device, max_rows=slots,
+            markov_collective = None if config.replicated_markov else create_all_gather_runtime(group, device, max_rows=slots,
                 columns=2 * weights.config.vocabulary, ipc=package_storage.peer_storage)
         # Prefill rows beyond a channel's capacity gather in chunks, as they reduce.
         embedding_collective = create_all_gather_runtime(group, device, max_rows=channel_rows,
@@ -282,6 +309,10 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
             ipc=package_storage.peer_storage)
         route_collective = (create_route_runtime(group, device, ipc=package_storage.peer_storage)
                             if shard.world_size > 1 else None)
+        prefill_route_collective = (create_head_exchange(group, device, max_rows=channel_rows,
+            heads=shard.world_size,
+            head_dim=(weights.config.text["routed_expert_hidden_size"] + 2 * weights.config.text["num_experts"]) // shard.world_size,
+            ipc=package_storage.peer_storage) if shard.world_size > 1 else None)
         context = None
         if config.context_parallel and shard.world_size > 1:
             from .dcp import RECORD_BYTES, ContextParallel, ContextShards
@@ -301,6 +332,20 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
                                            heads=heads, head_dim=512,
                                            query_head_dim=RECORD_BYTES, ipc=package_storage.peer_storage),
                 coordinator=coordinator, peers=pool.share_pages(package_storage, group), slab=None, **extra)
+            if weights.config.dsa is not None and config.prefill_chunk_size >= 4096:
+                from ignition.components.shared_pages import SharedPages
+
+                staging = SharedPages(group, device, config.context // shard.world_size * RECORD_BYTES,
+                                      ipc=package_storage.peer_storage)
+                index_staging = SharedPages(group, device, config.context // shard.world_size * 132,
+                                            ipc=package_storage.peer_storage)
+                context = replace(context, staging=staging, stage_runtime=collective,
+                    stage_signals=tuple(torch.zeros((1, 8), dtype=torch.bfloat16, device=device) for _ in range(4)),
+                    index_staging=index_staging,
+                    index_signals=tuple(torch.zeros((1, 8), dtype=torch.bfloat16, device=device) for _ in range(4)),
+                    selections=create_head_exchange(group, device,
+                        max_rows=-(-config.prefill_chunk_size // shard.world_size),
+                        heads=shard.world_size, head_dim=4096, ipc=package_storage.peer_storage))
         # Every MLA step gathers each rank's query and KV latent rows, padded to 16 bytes: one exchange for up to
         # eight rows, as vLLM's b12x latent transport carries, and one that prefill steps use in chunks.
         text = weights.config.text
@@ -308,11 +353,15 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
         latent_runtimes = tuple(create_head_exchange(group, device, max_rows=rows, heads=shard.world_size,
                                                      head_dim=-(-latent // 8) * 8, ipc=package_storage.peer_storage)
                                 for rows in sorted({min(8, max_tokens), channel_rows}))
-        identity = target_tuning_identity(weights.config, headers, shard.world_size)
+        identity = target_tuning_identity(weights.config, headers, shard.world_size,
+            online_mxfp8_scope=config.online_mxfp8_scope)
         session = RecordedPreparationSession(
             compile_workers=config.compile_workers, collective_tuning=config.collective_tuning, collective_ladder=config.collective_ladder, autotune_effort=config.autotune_effort, tuning_replica=config.tuning_replica,
             native_dense_activations=config.native_dense_activations, lock_gpu_clocks=config.lock_gpu_clocks,
             device=device, checkpoint=identity,
+            kernel_selections=config.kernel_selections,
+            compiler_selections=config.compiler_selections,
+            record_kernel_selections=config.record_kernel_selections,
             workload_schema="kimi3", numerical_policy="default", coordinator=coordinator,
             headroom_bytes=config.headroom_bytes, benchmark_storage=package_storage)
         session.__enter__()
@@ -353,6 +402,16 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
                 window = min(CONTEXT_WINDOW, config.context)
                 context = replace(context, window=window, slab=torch.zeros(
                     (window + config.prefill_chunk_size, RECORD_BYTES), dtype=torch.float8_e4m3fn, device=device))
+            if context is not None and getattr(context, "staging", None) is not None:
+                records = torch.zeros((config.context, RECORD_BYTES), dtype=torch.float8_e4m3fn, device=device)
+                context = replace(context, staged_records=records,
+                    index_records=torch.zeros((config.context // 64, 64 * 132), dtype=torch.uint8, device=device))
+        if context is not None and getattr(context, "staging", None) is not None:
+            # The slab's address survives scratch unmapping, but its pointer table
+            # must retain its contents when scratch is rematerialized as zeros.
+            context = replace(context, staged_address=torch.tensor(
+                [context.staged_records.data_ptr()], dtype=torch.int64, device=device),
+                index_columns=torch.arange(config.context // 64, dtype=torch.int32, device=device))
         vision_prefill = vision_state = None
         if patches:
             vision_prefill = PrefillVisionInputs.allocate(config.prefill_chunk_size, device)
@@ -378,7 +437,8 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
         batch_sizes = config.benchmark_selection.batches
     collectives = dict(runtime=collective, embedding_runtime=embedding_collective, router_runtime=router_collective,
         route_runtime=route_collective, vocabulary_runtime=vocabulary_collective, coordinator=coordinator,
-        vision_state=vision_state, context=context, latent_runtimes=latent_runtimes)
+        vision_state=vision_state, context=context, latent_runtimes=latent_runtimes,
+        prefill_route_runtime=prefill_route_collective)
     speculation = None
     if drafting:
         from .dspark import SpeculativePreparation
@@ -494,7 +554,14 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
             compile_kinds=("prefill", "scored_prefill", "decode", "resume", "vision", "speculative"))
     finally:
         scratch_pool.materialize()
-    session.freeze()
+    if config.record_kernel_selections is not None:
+        from ignition.preparation.kernel_selections import record_selections
+
+        record_selections(session, compiled, device, config.record_kernel_selections, coordinator)
+    # Diagnostic benchmarks may compile another round over these resident weights.
+    # Each capture still forbids kernel resolution; native preparation stays frozen.
+    if config.benchmark_selection is None:
+        session.freeze()
     pool.clear_for_preparation()
     torch.cuda.synchronize(device)
     release_unused()
@@ -533,7 +600,11 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
                                                                   config.speculative_token_capacity),
             speculative_fixed_width=config.speculative_fixed_width)
         memory.update(speculative_round_shapes=config.speculative_round_shapes,
-                      speculative_graph_budget=config.speculative_graph_budget)
+                      speculative_graph_budget=config.speculative_graph_budget,
+                      online_mxfp8=config.online_mxfp8, online_mxfp8_scope=config.online_mxfp8_scope,
+                      draft_head_quantization=config.draft_head_quantization,
+                      markov_head_quantization=config.markov_head_quantization,
+                      replicated_markov=config.replicated_markov)
     draft_disposable = [] if speculation is None else [speculation.draft_scratch.scratch_tensors(), speculation.context_buffers,
         speculation.kda_records.corrections, speculation.kda_records.keys_and_gates]
     aliases = (("weights.draft.embedding", "weights.embedding"),) if drafting and weights.config.dsa is not None else ()
@@ -548,15 +619,24 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, package_storag
             if signatures[name].kind == "prefill"},
         benchmark_rounds=None if state is None else {name: forward for name, forward in forwards.items()
             if signatures[name].kind == "speculative"},
-        close_resources=(() if scoring is None else (scoring,)),
+        benchmark_capture=None if state is None else dict(
+            session=session, collective=collective, coordinator=coordinator,
+            cache_root=config.kernel_cache, compiled=compiled),
+        close_resources=(() if scoring is None else (scoring,)) +
+                        (() if context is None or getattr(context, "staging", None) is None
+                         else (context.staging, context.index_staging)),
         export_zero_ranges=(*(() if scoring is None else scoring.zero_ranges()),
                            *storage_ranges([prefill_storage, decode_storage, graph_buffers.chunks,
             None if speculation is None else speculation.sampling_buffers.chunks, arena.tensor, metadata,
                                            *(() if context is None else (context.slab,)),
+                                           *(() if context is None or getattr(context, "staging", None) is None
+                                             else (context.staged_records, context.staging.tensor,
+                                                   context.index_records, context.index_staging.tensor)),
                                            *(() if not patches else (vision_storage, vision_state.arena)),
                                            decoder_buffers.scratch_tensors(), *draft_disposable]), *completion.zero_ranges()),
         resources=(scoring, weights, pool, requests, inputs, admission, commands, arena, forwards, prefill_storage, context,
                    decode_storage, metadata, compiled, stream, graph_pool, session, coordinator, collective,
                    vocabulary_collective, embedding_collective, router_collective, route_collective,
+                   prefill_route_collective,
                    vision_inputs, vision_prefill, vision_state, vision_storage, scratch_pool, shared_scratch, graph_buffers,
                    speculation, context_collective, markov_collective, latent_runtimes))

@@ -58,10 +58,11 @@ def test_capture_drains_after_prepare_and_sync_before_capture(monkeypatch):
     stream = SimpleNamespace(wait_stream=lambda value: None,
                              synchronize=lambda: events.append('sync'))
     monkeypatch.setattr(capture, 'ForwardCache', Cache)
+    monkeypatch.setattr(capture, 'capture_stream', lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, 'current_stream', lambda device: stream)
     monkeypatch.setattr(capture.torch.cuda, 'stream', lambda stream: nullcontext())
     monkeypatch.setattr(capture.torch.cuda, 'synchronize', lambda device: None)
-    monkeypatch.setattr(capture.torch.cuda, 'CUDAGraph', lambda: 'graph')
+    monkeypatch.setattr(capture.torch.cuda, 'CUDAGraph', SimpleNamespace)
     monkeypatch.setattr(capture.torch.cuda, 'graph', lambda *args, **kwargs: nullcontext())
     capture.capture_forwards({'speculative': forward},
         {'speculative': SimpleNamespace(kind='speculative')},

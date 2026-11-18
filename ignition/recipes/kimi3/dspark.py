@@ -109,9 +109,11 @@ class PreparedContext:
         self.gather = PreparedChunkedAllGather(self.local, self.projected, runtime=runtime, coordinator=coordinator,
                                         session=session, name=name + ".gather")
         self.hidden_norm = draft.hidden_norm
-        self.kv = buffer("kv", draft.context_kv.shape[0])
-        self.project_kv = UnquantizedProjection(self.normalized, draft.context_kv, self.kv,
-                                                session=session, name=name + ".kv")
+        context_width = (draft.context_kv.shape[0] if isinstance(draft.context_kv, torch.Tensor)
+                         else draft.context_kv.out_features)
+        self.kv = buffer("kv", context_width)
+        self.project_kv = projection(self.normalized, draft.context_kv, self.kv,
+                                     session=session, name=name + ".kv", workspace=workspace)
         self.key = buffer("key", kv_heads, d.head_dim)
         self.value = buffer("value", kv_heads, d.head_dim)
         self.slots = torch.full((tokens,), -1, dtype=torch.int64, device=device)
@@ -197,8 +199,8 @@ class DraftAttention(torch.nn.Module):
         super().__init__()
         self.scratch, self.metadata = scratch, metadata
         d, eps = config.draft, config.draft.text["rms_norm_eps"]
-        self.qkv = UnquantizedProjection(scratch.embedding, weights.qkv, scratch.qkv, session=session,
-                                         name=name + ".qkv")
+        self.qkv = projection(scratch.embedding, weights.qkv, scratch.qkv, session=session,
+                              name=name + ".qkv", workspace=workspace)
         self.q_norm, self.k_norm = canonical_norm(weights.query_norm, eps), canonical_norm(weights.key_norm, eps)
         self.inverse = inverse_frequencies(config, scratch.embedding.device)
         self.key_cache, self.value_cache = (pool.reserved_region(f"draft{index}.{kind}") for kind in ("key", "value"))
@@ -274,7 +276,7 @@ class PreparedDraft:
         self.norm = canonical_norm(draft.norm, eps)
         head = weights.head if draft.head is None else draft.head
         self.head = PreparedVocabularyProjection(scratch.hidden, head, scratch.local_logits, scratch.logits,
-            runtime=vocabulary_runtime, coordinator=coordinator, session=session, name=name + ".head")
+            runtime=vocabulary_runtime, coordinator=coordinator, session=session, name=name + ".head", workspace=workspace)
 
     def __call__(self):
         hidden = self.embedding.gather(self.embedding.lookup())
@@ -293,18 +295,32 @@ class PreparedMarkov:
         rows, device = tokens.numel(), tokens.device
         draft, vocabulary = weights.draft, weights.config.vocabulary
         self.embedding = torch.zeros((rows, weights.config.draft.markov_rank), dtype=torch.bfloat16, device=device)
-        self.local = torch.zeros((rows, vocabulary // weights.shard.world_size), dtype=torch.float32, device=device)
+        columns = vocabulary if runtime is None else vocabulary // weights.shard.world_size
+        self.local = torch.zeros((rows, columns), dtype=torch.float32, device=device)
         self.logits = torch.zeros((rows, vocabulary), dtype=torch.float32, device=device)
         self.embed = PreparedEmbedding(draft.markov_embedding, tokens, self.embedding, session=session,
                                        name=name + ".embed")
-        self.projection = UnquantizedProjection(self.embedding, draft.markov_head, self.local, session=session,
-                                                name=name + ".head")
+        from ignition.components.markov_sampling import (PreparedRowScaledFP8MarkovProjection,
+                                                         RowScaledFP8MarkovWeight)
+
+        if isinstance(draft.markov_head, RowScaledFP8MarkovWeight):
+            self.projection = PreparedRowScaledFP8MarkovProjection(self.embedding, draft.markov_head, self.local,
+                                                                   session=session, name=name + ".head")
+        else:
+            self.projection = UnquantizedProjection(self.embedding, draft.markov_head, self.local, session=session,
+                                                    name=name + ".head")
         # Gathering BF16 views transports the FP32 shards without conversion.
         self.gather = PreparedAllGather(self.local.view(torch.bfloat16), self.logits.view(torch.bfloat16),
             runtime=runtime, coordinator=coordinator, session=session, name=name + ".gather")
 
     def __call__(self):
-        self.projection(self.embed())
+        from ignition.components.markov_sampling import PreparedRowScaledFP8MarkovProjection
+
+        embedded = self.embed()
+        if isinstance(self.projection, PreparedRowScaledFP8MarkovProjection):
+            self.projection()
+        else:
+            self.projection(embedded)
         self.gather(self.local.view(torch.bfloat16))
         return self.logits
 
@@ -339,6 +355,7 @@ class SpeculativePreparation:
         self.collectives = dict(runtime=collectives["runtime"], vocabulary_runtime=collectives["vocabulary_runtime"],
                                 coordinator=coordinator)
         self.markov_runtime = markov_runtime
+        self.block_proposal_broadcast = markov_runtime is None
         kda_layers = {i: w["attention"] for i, w in enumerate(weights.layers) if weights.config.layers[i] == "kda"}
         heads = weights.config.text["linear_attn_config"]["num_heads"] // weights.shard.world_size
         self.kda_records = KDARecords.allocate(kda_layers, requests.capacity + 1, heads, pool.backing.device)
@@ -351,7 +368,7 @@ class SpeculativePreparation:
         self.block_size, self.logit_offset = max(1, draft_tokens), 0
         self.context_buffers = {}
         context_type, draft_type, scratch_type = PreparedContext, PreparedDraft, DraftScratch
-        if weights.config.dsa is not None:
+        if weights.config.draft.window is None:
             from ignition.recipes.kimi31.dspark import DraftScratch as scratch_type
             from ignition.recipes.kimi31.dspark import PreparedContext as context_type
             from ignition.recipes.kimi31.dspark import PreparedDraft as draft_type

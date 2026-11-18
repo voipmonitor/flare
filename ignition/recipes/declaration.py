@@ -116,6 +116,7 @@ class Speculation:
     draft_head_quantization: str | None = None
     markov_head_quantization: str | None = None
     vocabulary_parallel_sampling: bool = False
+    replicated_markov: bool = False
     method: str | None = None
 
     def __post_init__(self):
@@ -125,6 +126,12 @@ class Speculation:
             raise ValueError("vocabulary-parallel sampling requires positive learned draft depth")
         if self.vocabulary_parallel_sampling and self.markov_head_quantization == "nvfp4":
             raise ValueError("vocabulary-parallel sampling requires BF16 or row-scaled FP8 Markov weights")
+        if self.replicated_markov and self.draft_tokens < 1:
+            raise ValueError("replicated Markov requires positive learned draft depth")
+        if self.replicated_markov and self.vocabulary_parallel_sampling:
+            raise ValueError("replicated Markov and vocabulary-parallel sampling are mutually exclusive")
+        if self.replicated_markov and self.markov_head_quantization == "nvfp4":
+            raise ValueError("replicated Markov requires BF16 or row-scaled FP8 weights")
         for head, choices in (("draft", ("nvfp4", "mxfp8")), ("markov", ("nvfp4", "fp8"))):
             value = getattr(self, f"{head}_head_quantization")
             if value is not None and value not in choices:
@@ -199,6 +206,7 @@ class Recipe:
     auxiliary stream, which a plan can serialize onto the main stream.
     `online_mxfp8` states that the recipe names BF16 projections a plan may store as
     MXFP8 while loading, trading checkpoint precision for decode bandwidth.
+    `online_mxfp8_scopes` names eligible projection groups; `all` selects the complete set.
     `language_model_only` states that a plan may prepare the recipe without its vision
     encoder, rejecting images and leaving the encoder's memory to KV pages.
     `mla_compute_modes` declares the attention arithmetic constraints a plan may select,
@@ -234,6 +242,7 @@ class Recipe:
     stream_overlap: bool = False
     mixed_prefill: bool = False
     online_mxfp8: bool = False
+    online_mxfp8_scopes: tuple[str, ...] = ("all",)
     language_model_only: bool = False
     b12x_environment: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     mla_compute_modes: tuple[str, ...] = ("auto",)

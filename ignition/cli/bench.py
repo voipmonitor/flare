@@ -51,6 +51,8 @@ def arguments(parser):
                          help="independent input and sampling seeds, comma-separated (default: 0,1,2)")
     options.add_argument("--output", type=Path, metavar="PATH",
                          help="write JSON configuration, per-case statistics, and every raw latency sample")
+    options.add_argument("--resident", type=Path, metavar="DIRECTORY",
+                         help="keep Kimi weights and ranks alive; read JSON measurement/recapture commands from stdin")
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,10 @@ def run(args):
         raise UsageError("ignition bench supports Qwen3.8-27B DFlash2 and Kimi K3.1 Pro DSpark")
     if settings.speculation_study and model.recipe.name != "qwen38_dense":
         raise UsageError("--speculation-study requires Qwen3.8-27B DFlash2")
+    if args.resident is not None and (model.recipe.name != "kimi31" or settings.prefill):
+        raise UsageError("--resident requires complete Kimi K3.1 DSpark rounds")
+    if args.resident is not None:
+        args.resident.mkdir(parents=True, exist_ok=False)
     from ignition.preparation.selection import BenchmarkSelection
 
     concurrency = configuration.max_concurrency(model.checkpoint.alias, max(settings.batches), args.max_concurrency)
@@ -151,17 +157,22 @@ def run(args):
         context_parallel=context_parallel(args, model), stream_overlap=stream_overlap(args, model),
         compile_workers=args.compile_workers, tuning_gpus=args.tuning_gpus,
         autotune_effort=args.autotune_effort, collective_tuning=args.collective_tuning, collective_ladder=args.collective_ladder,
+        kernel_selections=args.kernel_selections,
+        compiler_selections=args.compiler_selections,
+        record_kernel_selections=args.record_kernel_selections,
         lock_gpu_clocks=args.lock_gpu_clocks, native_dense_activations=args.native_dense_activations,
         force_moe_decode_a16=args.force_moe_decode_a16,
         shard_hyperconnections=args.shard_hyperconnections, joint_tuning=args.joint_tuning,
         image_concurrency=args.image_concurrency, mixed_prefill=args.mixed_prefill,
         prompt_logprobs=args.prompt_logprobs, expert_scale_compression=args.expert_scale_compression,
-        online_mxfp8=args.online_mxfp8, language_model_only=args.language_model_only,
+        online_mxfp8=args.online_mxfp8, online_mxfp8_scope=args.online_mxfp8_scope, language_model_only=args.language_model_only,
         mla_compute_mode=args.mla_compute_mode)
     plan = replace(plan, benchmark_selection=BenchmarkSelection(
         batches=settings.batches, contexts=settings.contexts, width=settings.width,
         prefill_chunk=plan.prefill_chunk if settings.prefill else 0, speculation_study=settings.speculation_study,
         study_widths=settings.study_widths))
+    if args.resident is not None and plan.record_kernel_selections is None:
+        plan = replace(plan, record_kernel_selections=args.resident / "kernel-selections")
     print(json.dumps({"plan": plan.to_dict()}), file=sys.stderr, flush=True)
     progress = _progress(args.verbose)
     hub_cache = configuration.directory("hub_cache")
@@ -174,7 +185,8 @@ def run(args):
             fetch(model, hub_cache, progress_bars=False)
             model.verify(hub_cache)
     environment.apply(configuration, plan.gpus, plan.recipe.b12x_environment)
-    result = _measure(model, plan, configuration, settings, progress, compile_forwards=not args.no_compile, output=args.output)
+    result = _measure(model, plan, configuration, settings, progress, compile_forwards=not args.no_compile,
+                      output=args.output, resident=args.resident)
     write_result(result, args.output)
     return 0
 
@@ -204,7 +216,7 @@ def _progress(verbose):
     return Progress()
 
 
-def _measure(model, plan, configuration, settings, progress, *, compile_forwards, output=None):
+def _measure(model, plan, configuration, settings, progress, *, compile_forwards, output=None, resident=None):
     import torch
     from tokenizers import Tokenizer
     from ignition.bench.runner import BenchmarkCase, PrefillCase, run_benchmark
@@ -226,7 +238,9 @@ def _measure(model, plan, configuration, settings, progress, *, compile_forwards
             "tensor_parallel", "prefill_chunk", "stream_overlap", "context_parallel",
             "native_dense_activations", "force_moe_decode_a16", "autotune_effort", "collective_tuning", "collective_ladder", "compile_workers",
             "speculative_token_capacity", "speculation", "expert_scale_compression", "mla_compute_mode",
-            "online_mxfp8", "language_model_only")}}
+            "online_mxfp8", "online_mxfp8_scope", "language_model_only")}}
+    details["configuration"]["preparation"].update(
+        kernel_selections=preparation["kernel_selections"], compiler_selections=preparation["compiler_selections"])
 
     if settings.speculation_study:
         details["configuration"]["speculation_study"] = dict(
@@ -250,7 +264,8 @@ def _measure(model, plan, configuration, settings, progress, *, compile_forwards
     try:
         with storage:
             prepared = prepare_recipe(model.recipe.prepare, snapshot, plan, compile_forwards=compile_forwards,
-                kernel_cache=configuration.directory("kernel_cache"), progress=progress, package_storage=storage)
+                kernel_cache=configuration.directory("kernel_cache"), progress=progress, package_storage=storage,
+                retain_graphs=resident is not None)
         with prepared:
             root = getattr(prepared, "model", prepared)
             tokenizer_asset = root.server_config["assets"]["tokenizer"]
@@ -262,8 +277,14 @@ def _measure(model, plan, configuration, settings, progress, *, compile_forwards
                                context_tokens=context) for batch in settings.batches for context in settings.contexts
                                for width in settings.study_widths or (settings.width,)))
             execute = run_study if settings.speculation_study else run_benchmark
-            result = execute(prepared, tokenizer, scenarios=scenarios, warmup=settings.warmup,
-                repetitions=settings.repetitions, seeds=settings.seeds, progress=record)
+            if resident is None:
+                result = execute(prepared, tokenizer, scenarios=scenarios, warmup=settings.warmup,
+                    repetitions=settings.repetitions, seeds=settings.seeds, progress=record)
+            else:
+                from ignition.bench.resident import interact
+
+                result = interact(prepared, tokenizer, scenarios=scenarios, settings=settings,
+                                  directory=resident, details=details)
     except FlareError:
         raise
     except Exception as error:

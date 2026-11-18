@@ -355,7 +355,8 @@ fn rank_commitments_are_verified_before_catalog_decoding() {
 
 #[test]
 fn selected_decoded_metadata_budget_is_checked_before_inflation() {
-    let ranks = vec![invalid_frame(schema::MAX_BODY as u64 - 4096); 5];
+    let count = schema::MAX_SELECTED_RANK_METADATA / schema::MAX_BODY as u64 + 1;
+    let ranks = vec![invalid_frame(schema::MAX_BODY as u64 - 4096); count as usize];
     let (bytes, publishers) = signed(&ranks);
     assert!(bytes.len() < 4096);
     let error = protection::verify(&bytes, &publishers, selected(None))
@@ -366,6 +367,21 @@ fn selected_decoded_metadata_budget_is_checked_before_inflation() {
         error.contains("selected reconstructed rank metadata exceeds its limit"),
         "{error}"
     );
+}
+
+#[test]
+fn tp16_weight_catalogs_fit_the_selected_metadata_budget() {
+    // Sixteen 40 MiB catalogs fit the aggregate host-metadata ceiling.
+    // The invalid first frame stops before bulk inflation, while the budget
+    // check still accounts for every authenticated rank's decoded size.
+    let ranks = vec![invalid_frame(40 << 20); 16];
+    let (bytes, publishers) = signed(&ranks);
+    let error = protection::verify(&bytes, &publishers, selected(None))
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("decode prepared weight catalog"), "{error}");
+    assert!(!error.contains("metadata exceeds its limit"), "{error}");
 }
 
 #[test]
