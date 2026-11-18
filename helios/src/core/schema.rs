@@ -26,7 +26,10 @@ pub const MAX_BODY: usize = 128 << 20;
 /// Bound on the complete serialized envelope.
 pub const MAX_ENVELOPE: usize = 128 << 20;
 /// Bound on reconstructed rank metadata selected by one verification.
-pub const MAX_SELECTED_RANK_METADATA: u64 = 512 << 20;
+/// Packed expert source maps can exceed 512 MiB across a TP16 deployment. This
+/// host-metadata ceiling retains the independent 128 MiB bound on each rank;
+/// it does not reserve memory or affect device cache planning.
+pub const MAX_SELECTED_RANK_METADATA: u64 = 1 << 30;
 /// Executable compressed chunk size. Authentication covers chunks of exactly this size.
 pub const MAX_CHUNK: usize = 4 << 20;
 /// Bound on compressed chunks for one executable resource (4 TiB at the fixed chunk size).

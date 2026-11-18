@@ -484,7 +484,10 @@ pub fn verify(
                 super::prepared_weights::reconstructed_rank_nbytes(&decoded_rank, body.len())?
             ).ok_or_else(|| invalid("selected rank metadata length overflow"))?;
             if decoded_metadata_nbytes > schema::MAX_SELECTED_RANK_METADATA {
-                return Err(invalid("selected reconstructed rank metadata exceeds its limit"));
+                return Err(invalid(format!(
+                    "selected reconstructed rank metadata exceeds its limit: {} bytes through rank {}, limit {} bytes",
+                    decoded_metadata_nbytes, rank_id, schema::MAX_SELECTED_RANK_METADATA,
+                )));
             }
             ranks.push(decoded_rank);
         }
