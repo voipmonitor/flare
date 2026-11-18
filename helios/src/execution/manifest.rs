@@ -231,6 +231,8 @@ impl std::fmt::Debug for CollectiveHealth {
 
 #[derive(Clone, Debug)]
 pub struct ExecutionManifest {
+    /// Rank-local preinstantiated handles for a signed diagnostic comparison package.
+    pub benchmark_comparison: Option<super::graph_comparison::RankGraphComparison>,
     pub engram: Option<crate::engram::Binding>,
     /// Present when this rank's graphs launch collectives over a transport between hosts.
     pub collectives: Option<CollectiveHealth>,

@@ -765,6 +765,17 @@ impl GraphExecutor {
         uploads: &[Upload<'_>],
         grammar_constrained: bool,
     ) -> Result<Option<Fence>> {
+        let candidate = self.manifest.benchmark_comparison.as_ref().is_some_and(|c| c.session.candidate());
+        self.submit_role(graph_index, uploads, grammar_constrained, candidate)
+    }
+
+    pub(super) fn submit_role(
+        &mut self,
+        graph_index: usize,
+        uploads: &[Upload<'_>],
+        grammar_constrained: bool,
+        candidate: bool,
+    ) -> Result<Option<Fence>> {
         if let Some(error) = &self.poison {
             return Err(ExecutionError::Poisoned(Failure::caused_by(
                 format!("executor failed: {error}"),
@@ -860,7 +871,10 @@ impl GraphExecutor {
                     engram.enqueue(fence.0, graph.packed_tokens(), uploads, &frame.started)?;
                 }
             }
-            resources.model.launch(graph.handle)?;
+            let paired = self.manifest.benchmark_comparison.as_ref();
+            let handle = paired.map_or(graph.handle, |c| c.handle(graph_index, graph.handle, candidate));
+            resources.model.launch(handle)?;
+            if let Some(comparison) = paired { comparison.record(graph_index, candidate); }
             resources.model.record(&frame.produced)?;
             resources.copy.wait(&frame.produced)?;
             let address = self.manifest.buffer("completion_records")?.address

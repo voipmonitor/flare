@@ -96,6 +96,7 @@ impl NativeResources {
             })
         }).collect::<Result<Vec<_>>>()?;
         let manifest = ExecutionManifest {
+            benchmark_comparison: None,
             tuning_graphs,
             collectives: None,
             engram: None,

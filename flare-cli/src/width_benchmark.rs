@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Local commands for changing the set of eligible C1 verification graphs between requests.
+//! Select a verification-row budget or a signed speculative graph role between native benchmark requests.
 use std::{fs, io, path::PathBuf, time::Duration};
 
 pub(super) struct Control {
@@ -20,20 +20,23 @@ impl Control {
         };
         if self.last == command { return; }
         let words: Vec<_> = command.split_whitespace().collect();
-        let budget = if let [_, budget] = words.as_slice() { budget.parse::<usize>().ok() } else { None };
         server.pause_admission();
         let outcome = if !server.wait_for_requests(Duration::ZERO) {
             server.resume_admission();
             return;
-        } else if let Some(budget) = budget {
-            server.set_benchmark_rows(budget).map_err(|e| e.to_string())
         } else {
-            Err("expected a unique transaction ID and a nonnegative verification-row budget".to_owned())
+            match words.as_slice() {
+                [_, "role", role @ ("control" | "candidate")] => server.set_benchmark_graph_role(*role == "candidate")
+                    .map_err(|e| e.to_string()),
+                [_, rows] => rows.parse::<usize>().map_err(|_| "invalid verification row budget".to_owned())
+                    .and_then(|n| server.set_benchmark_rows(n).map(|()| serde_json::Value::Null).map_err(|e| e.to_string())),
+                _ => Err("expected TRANSACTION ROWS or TRANSACTION role control|candidate".to_owned()),
+            }
         };
         server.resume_admission();
         let receipt = serde_json::json!({
-            "command": command.trim(), "applied": outcome.is_ok(),
-            "error": outcome.err(), "pid": std::process::id()
+            "command": command.trim(), "applied": outcome.is_ok(), "comparison": outcome.as_ref().ok(),
+            "error": outcome.as_ref().err(), "pid": std::process::id()
         });
         let temporary = self.dir.join("ack.tmp");
         let write = fs::write(&temporary, receipt.to_string()).and_then(|()| fs::rename(temporary, self.dir.join("ack.json")));

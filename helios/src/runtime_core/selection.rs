@@ -247,6 +247,16 @@ impl LoadOptions {
                     return Err(invalid("duplicate or unnamed startup tuning graph"));
                 }
             }
+            // Paired images are signed executable resources of the same speculative operation.
+            // They share its logical serving ABI and never enter the scheduler's shape catalogue.
+            for resource in &core.graphs {
+                if let Some(logical) = resource.name.strip_prefix(crate::execution::graph_comparison::CONTROL_PREFIX) {
+                    if !execution.graphs.iter().any(|g| g.name == logical && g.kind == "speculative")
+                        || !names.insert(resource.name.clone()) {
+                        return Err(invalid("invalid resident control graph binding"));
+                    }
+                }
+            }
             let resources: HashSet<_> = core.graphs.iter().map(|g| g.name.clone()).collect();
             if names != resources || resources.len() != core.graphs.len() {
                 return Err(invalid("execution catalog must describe every captured graph exactly once"));
@@ -339,7 +349,9 @@ impl LoadOptions {
             rank_catalog = Some(catalog);
             let selected: HashSet<_> = execution.graphs.iter().map(|g| g.name.as_str())
                 .chain(execution.tuning_graphs.iter().map(|g| g.name.as_str())).collect();
-            core.graphs.retain(|g| selected.contains(g.name.as_str()));
+            core.graphs.retain(|g| selected.contains(g.name.as_str()) || g.name
+                .strip_prefix(crate::execution::graph_comparison::CONTROL_PREFIX)
+                .is_some_and(|name| selected.contains(name)));
             prune_kernels(core)?;
         }
         let object = config
@@ -547,6 +559,28 @@ mod tests {
             assert!(LoadOptions { max_concurrency: Some(1), mtp_draft_tokens: Some(0), ..Default::default() }
                 .select(&mut cores, &mut config()).is_err());
         }
+    }
+
+    #[test]
+    fn resident_graph_pairs_follow_the_selected_logical_speculative_graph() {
+        fn append(rank: &mut Core, original: &str, label: &str) {
+            let g = rank.graphs.iter().find(|g| g.name == original).unwrap();
+            let g = Graph { name: format!("paired-control--{label}"), flags: g.flags,
+                resource: g.resource.clone(), node_count: g.node_count, edge_count: g.edge_count,
+                functions: g.functions.clone() };
+            rank.graphs.push(g);
+        }
+        let mut input = core();
+        append(&mut input, "speculative1x4", "speculative1x4");
+        append(&mut input, "speculative2x4", "speculative2x4");
+        let mut ranks = vec![input];
+        LoadOptions { max_concurrency: Some(1), ..Default::default() }.select(&mut ranks, &mut config()).unwrap();
+        assert!(ranks[0].graphs.iter().any(|g| g.name == "paired-control--speculative1x4"));
+        assert!(!ranks[0].graphs.iter().any(|g| g.name == "paired-control--speculative2x4"));
+        assert!(!ranks[0].execution.as_ref().unwrap().graphs.iter().any(|g| g.name.starts_with("paired-control--")));
+        let mut invalid_core = core();
+        append(&mut invalid_core, "speculative1x4", "missing");
+        assert!(LoadOptions::default().select(&mut [invalid_core], &mut config()).is_err());
     }
 
     fn config() -> Value {

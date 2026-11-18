@@ -49,6 +49,7 @@ struct Step {
     fence: Fence,
     graph: usize,
     grammar: bool,
+    candidate: bool,
     uploads: Vec<OwnedUpload>,
 }
 impl Step {
@@ -299,6 +300,7 @@ impl ThreadedExecutor {
         };
         let step = Arc::new(Step {
             fence, graph, grammar,
+            candidate: self.local.manifest().benchmark_comparison.as_ref().is_some_and(|c| c.session.candidate()),
             uploads: uploads.iter().map(|u| OwnedUpload {
                 buffer: u.buffer.to_owned(), offset: u.offset, bytes: u.bytes.to_vec(),
             }).collect(),
@@ -364,7 +366,7 @@ impl ThreadedExecutor {
                 return Err(invalid("rank-zero reservation changed before commit"));
             }
             protocol::dispatch_commit(&self.peers, frame.step.fence, frame.step.graph)?;
-            if self.local.submit(frame.step.graph, &uploads, frame.step.grammar)? != Some(frame.step.fence) {
+            if self.local.submit_role(frame.step.graph, &uploads, frame.step.grammar, frame.step.candidate)? != Some(frame.step.fence) {
                 return Err(invalid("rank-zero fence changed after validation"));
             }
             frame.committed = true;
@@ -477,7 +479,7 @@ fn rank_loop(
                 prepared_at = None;
                 let step = prepared.take().ok_or_else(|| invalid("rank commit arrived without preparation"))?;
                 if step.fence != fence || step.graph != graph { return Err(invalid("rank commit identity differs")); }
-                if executor.submit(graph, &step.uploads(), step.grammar)? != Some(fence) {
+                if executor.submit_role(graph, &step.uploads(), step.grammar, step.candidate)? != Some(fence) {
                     return Err(invalid("rank fence changed after validation"));
                 }
                 started.push_back(Instant::now());
@@ -507,6 +509,11 @@ fn rank_loop(
 }
 
 fn same_layout(a: &ExecutionManifest, b: &ExecutionManifest) -> bool {
+    match (&a.benchmark_comparison, &b.benchmark_comparison) {
+        (Some(a), Some(b)) if a.compatible_peer(b) => {}
+        (None, None) => {}
+        _ => return false,
+    }
     match (&a.engram, &b.engram) {
         // Partitioned tables have independent delivery groups, each numbered from zero.
         (Some(a), Some(b)) if Arc::ptr_eq(&a.shared, &b.shared) && a.rank == b.rank => {

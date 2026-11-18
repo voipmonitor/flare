@@ -378,6 +378,7 @@ pub fn manifest(config: &ModelConfig) -> ExecutionManifest {
         })
         .collect();
     ExecutionManifest {
+        benchmark_comparison: None,
         completion_token_capacity: config.completion_token_capacity,
         tuning_graphs: vec![],
         abi_version: 6,

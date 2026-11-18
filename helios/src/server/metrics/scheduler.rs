@@ -92,6 +92,7 @@ struct TraceBuffer {
 pub(in crate::server) struct SchedulerMetrics {
     pub catalog: OnceLock<Vec<GraphLabel>>,
     pub benchmark_rows: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    pub benchmark_comparison: OnceLock<std::sync::Arc<crate::execution::graph_comparison::GraphComparison>>,
     buffer: OnceLock<Mutex<TraceBuffer>>,
     enabled: AtomicBool,
     pub detail_requested: AtomicBool,

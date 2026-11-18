@@ -6,6 +6,7 @@
 
 //! Fixed-capacity graph execution over two pinned transport frames.
 
+pub mod graph_comparison;
 mod manifest;
 mod parallel;
 mod rank_stream;

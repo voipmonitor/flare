@@ -896,11 +896,45 @@ impl NativeModel {
     }
 
     pub fn manifests(&self) -> Result<Vec<ExecutionManifest>> {
+        use crate::execution::graph_comparison::{CONTROL_PREFIX, GraphComparison, RankGraphComparison};
+        let alternative_names = |rank: &NativeResources| {
+            let mut names: Vec<String> = rank.names.iter()
+                .filter_map(|n| n.strip_prefix(CONTROL_PREFIX).map(str::to_owned)).collect();
+            names.sort();
+            names
+        };
+        let names = self.ranks.first().map(alternative_names).unwrap_or_default();
+        if !self.ranks.iter().all(|r| alternative_names(r) == names) {
+            return Err(invalid("resident alternative graph sets differ between ranks"));
+        }
+        let comparison = if names.is_empty() {
+            None
+        } else {
+            if self.cluster.is_some() || self.ranks.len() != 16 {
+                return Err(invalid("resident comparison requires sixteen ranks on one host"));
+            }
+            Some(GraphComparison::new(names, self.ranks.len()))
+        };
         self.ranks
             .iter()
             .enumerate()
             .map(|(index, rank)| {
                 let mut manifest = rank.execution_manifest()?;
+                if let Some(session) = &comparison {
+                    if manifest.request_capacity() != 1 {
+                        return Err(invalid("resident comparison requires C1"));
+                    }
+                    let mut control = vec![None; manifest.graphs.len()];
+                    for (ordinal, name) in session.names().iter().enumerate() {
+                        let target = manifest.graphs.iter().position(|g| &g.name == name)
+                            .ok_or_else(|| invalid("resident control lacks its serving operation"))?;
+                        let alternate_name = format!("{CONTROL_PREFIX}{name}");
+                        let source = rank.names.iter().position(|n| *n == alternate_name)
+                            .ok_or_else(|| invalid("resident control executable missing"))?;
+                        control[target] = Some((rank.executables[source] as usize, ordinal));
+                    }
+                    manifest.benchmark_comparison = Some(RankGraphComparison::new(session.clone(), index, control));
+                }
                 manifest.offload = self.offload.binding(index);
                 if let Some((shared, delivery_rank)) = self.engram.get(index) {
                     let events = shared

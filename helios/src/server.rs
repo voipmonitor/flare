@@ -437,6 +437,19 @@ impl Server {
         trace.benchmark_rows.store(rows, Ordering::Relaxed);
         Ok(())
     }
+    /// Selects one signed set of speculative graph handles for subsequent C1 requests.
+    pub fn set_benchmark_graph_role(&self, candidate: bool) -> Result<serde_json::Value> {
+        let status = self.model.metrics().snapshot(self.model.config().has_learned_drafts());
+        if self.model.config().limits.max_active != 1 || !self.wait_for_requests(Duration::ZERO)
+            || status.active != 0 || status.pending != 0 {
+            return Err("graph comparison requires drained and paused C1 admission".into());
+        }
+        let pair = self.model.metrics().scheduler_trace.benchmark_comparison.get()
+            .ok_or("no resident comparison graphs were loaded")?;
+        pair.select(candidate);
+        Ok(serde_json::json!({"role": if candidate {"candidate"} else {"control"},
+            "graphs": pair.names(), "launches": pair.counts()}))
+    }
     /// Waits for HTTP preparation and response owners after admission is paused.
     /// A timed-out wait leaves the server paused and permits resuming admission.
     pub fn wait_for_requests(&self, timeout: Duration) -> bool {

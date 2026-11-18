@@ -33,6 +33,7 @@ fn frame(fence: u64, graph: usize, grammar: bool) -> Pending {
             fence: Fence(fence),
             graph,
             grammar,
+            candidate: false,
             uploads: Vec::new(),
         }),
         dispatched: Instant::now(),
@@ -322,6 +323,7 @@ fn rank_coordinator_matches_model_pending_window() {
         fence: Fence(1),
         graph: 0,
         grammar: true,
+        candidate: false,
         uploads: Vec::new(),
     });
     assert!(!can_submit_pending(&pending, false, &manifest));
@@ -329,6 +331,7 @@ fn rank_coordinator_matches_model_pending_window() {
         fence: Fence(1),
         graph: 0,
         grammar: false,
+        candidate: false,
         uploads: Vec::new(),
     });
     pending.push_back(frame(2, 1, false));

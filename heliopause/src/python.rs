@@ -248,6 +248,7 @@ pub(crate) fn execution_manifest(value: &Bound<'_, PyAny>) -> PyResult<Execution
         });
     }
     Ok(ExecutionManifest {
+        benchmark_comparison: None,
         collectives: None,
         engram: crate::embedding_tables::binding(value)?,
         cache: None,

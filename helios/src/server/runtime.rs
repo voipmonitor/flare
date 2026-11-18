@@ -507,6 +507,9 @@ impl ModelRuntime {
             .map(|binding| binding.shared.stats());
         let metrics = Arc::new(metrics);
         metrics.scheduler_trace.configure(&manifest.graphs);
+        if let Some(pair) = &manifest.benchmark_comparison {
+            let _ = metrics.scheduler_trace.benchmark_comparison.set(pair.session.clone());
+        }
         let worker_metrics = metrics.clone();
         let thread = thread::Builder::new()
             .name("flare-model".into())
