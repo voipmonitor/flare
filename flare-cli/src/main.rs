@@ -31,6 +31,7 @@ mod launch;
 #[cfg(unix)]
 mod orbit;
 mod trust;
+mod width_benchmark;
 #[cfg(windows)]
 use flare::windows;
 
@@ -289,7 +290,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     config["api_key"] = key.into();
     config["thinking_token_budget"] = serde_json::json!(configuration.thinking_token_budget());
     phase.finish(config["model_id"].as_str().unwrap_or_default());
-    serve(owner, config, progress, cluster, shape)?;
+    if let Some(directory) = args.benchmark_control {
+        if cluster.is_some() || !directory.is_dir() {
+            return Err("verification benchmark requires a local model and an existing control directory".into());
+        }
+        serve_local(owner, config, progress, Some(directory))?;
+    } else {
+        serve(owner, config, progress, cluster, shape)?;
+    }
     #[cfg(unix)]
     if let Some(peers) = launched {
         peers.finish().map_err(|e| e.to_string())?;
@@ -535,7 +543,7 @@ fn serve(
     shape: cluster::Shape,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if cluster.is_none() {
-        return serve_local(owner, config, progress);
+        return serve_local(owner, config, progress, None);
     }
     // SAFETY: This executable loads a trusted core and retains its resources
     // until the native server confirms every replay stream has drained.
@@ -628,6 +636,7 @@ fn serve_local(
     owner: NativeModel,
     config: serde_json::Value,
     mut progress: StartupProgress,
+    benchmark_directory: Option<std::path::PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let phase = progress.phase("Load tokenizer", None);
     let mut loaded = flare_helios::server::LoadedSession::new(owner, config)?;
@@ -646,7 +655,12 @@ fn serve_local(
     if let Err(error) = server.start_dashboard() {
         eprintln!("Could not start dashboard: {error}");
     }
-    while !STOP.load(Ordering::Relaxed) && server.wait(Duration::from_millis(250)) {}
+    let mut controls = benchmark_directory.map(width_benchmark::Control::new);
+    while !STOP.load(Ordering::Relaxed) && server.wait(Duration::from_millis(250)) {
+        if let Some(control) = &mut controls {
+            control.poll(server);
+        }
+    }
     server.stop_dashboard();
     std::thread::sleep(Duration::from_millis(50));
     let phase = progress.phase("Shut down server", None);

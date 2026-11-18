@@ -27,6 +27,8 @@ pub(in crate::server) struct GraphLabel {
     pub tokens: usize,
     pub prefill: usize,
     pub packed: usize,
+    pub gpu_elapsed_ns: AtomicU64,
+    pub gpu_samples: AtomicU64,
 }
 
 #[derive(Clone, Copy)]
@@ -89,6 +91,7 @@ struct TraceBuffer {
 #[derive(Default)]
 pub(in crate::server) struct SchedulerMetrics {
     pub catalog: OnceLock<Vec<GraphLabel>>,
+    pub benchmark_rows: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     buffer: OnceLock<Mutex<TraceBuffer>>,
     enabled: AtomicBool,
     pub detail_requested: AtomicBool,
@@ -109,6 +112,8 @@ impl SchedulerMetrics {
                     tokens: g.token_capacity,
                     prefill: g.prefill_capacity,
                     packed: g.packed_token_capacity,
+                    gpu_elapsed_ns: AtomicU64::default(),
+                    gpu_samples: AtomicU64::default(),
                 })
                 .collect(),
         );
@@ -176,6 +181,11 @@ impl SchedulerMetrics {
             .unwrap_or(if timing.queued { 0 } else { timing.wall_ns });
         self.execution_ns[reason].fetch_add(duration, Ordering::Relaxed);
         self.executions[reason].fetch_add(1, Ordering::Relaxed);
+        let gpu_ns = timing.gpu_ns.into_iter().flatten().max().filter(|ns| *ns > 0);
+        if let Some((elapsed, label)) = gpu_ns.zip(self.catalog.get().and_then(|graphs| graphs.get(graph))) {
+            label.gpu_elapsed_ns.fetch_add(elapsed, Ordering::Relaxed);
+            label.gpu_samples.fetch_add(1, Ordering::Relaxed);
+        }
         self.write(|trace| {
             let mut generations = [0; REQUEST_LANES];
             for lane in &step.lanes {
@@ -194,12 +204,7 @@ impl SchedulerMetrics {
                 queued: timing.queued,
                 selection,
                 credit_after_ns,
-                gpu_ns: timing
-                    .gpu_ns
-                    .into_iter()
-                    .flatten()
-                    .max()
-                    .filter(|ns| *ns > 0),
+                gpu_ns,
             });
         });
     }
@@ -251,6 +256,27 @@ mod tests {
                 tokens: 1,
             }],
         }
+    }
+
+    #[test]
+    fn physical_graph_totals_use_the_slowest_timed_rank_and_exclude_missing_intervals() {
+        let metrics = SchedulerMetrics::default();
+        let graph = GraphLabel {
+            name: "speculative1x8-tokens3".into(), kind: GraphKind::Speculative,
+            batch: 1, tokens: 8, prefill: 0, packed: 3,
+            gpu_elapsed_ns: Default::default(), gpu_samples: Default::default(),
+        };
+        assert!(metrics.catalog.set(vec![graph]).is_ok());
+        let step = step();
+        for (round, intervals) in [(0, [Some(11), Some(25)]), (1, [None, Some(0)]), (2, [None, Some(7)])] {
+            let mut timing = ExecutionTiming::default();
+            timing.gpu_ns[..2].copy_from_slice(&intervals);
+            metrics.completed(0, Fence(round), 0, &step, timing, SubmittedTiming::default(), 0.0);
+        }
+        let counters = &metrics.catalog.get().unwrap()[0];
+        assert_eq!(counters.gpu_elapsed_ns.load(Ordering::Relaxed), 32);
+        assert_eq!(counters.gpu_samples.load(Ordering::Relaxed), 2);
+        assert!(metrics.buffer.get().is_none());
     }
 
     #[test]

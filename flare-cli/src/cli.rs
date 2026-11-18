@@ -475,6 +475,7 @@ impl OrbitPush {
             controller_key: None,
             transfer_streams: self.transfer_streams,
             stage_only: false,
+            benchmark_control: None,
             api_key_file: None,
             scheduler_policy: "balanced".into(),
             scheduler_terminal_value: None,
@@ -656,6 +657,7 @@ impl OrbitRun {
             controller_key: None,
             transfer_streams: self.transfer_streams,
             stage_only: false,
+            benchmark_control: None,
             api_key_file: self.api_key_file.clone(),
             scheduler_policy: self
                 .scheduler_policy
@@ -767,6 +769,10 @@ pub struct Run {
     /// Distribute and verify rank cores, then exit before GPU initialization.
     #[arg(long, help_heading = "Multi-host options")]
     pub stage_only: bool,
+
+    /// Directory for the local resident C1 verification-width benchmark.
+    #[arg(long, value_name = "DIR", help_heading = "Benchmark options")]
+    pub benchmark_control: Option<PathBuf>,
 
     /// File containing the serving API key; overrides [server].api_key, including with an empty file.
     #[arg(long, value_name = "PATH", help_heading = "Serving options")]

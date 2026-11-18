@@ -306,7 +306,13 @@ impl RequestScheduler {
         let mut curves: [Option<Vec<f64>>; REQUEST_LANES] = std::array::from_fn(|_| None);
         let mut order = Vec::with_capacity(available.len());
         let mut frontier = std::collections::BinaryHeap::new();
+        let budget = self.benchmark_rows.as_ref().map_or(0, |v| v.load(std::sync::atomic::Ordering::Relaxed));
         for shape in self.costs.packed_round_shapes() {
+            // Match the per-shape eligibility of --mtp-verification-token-budget
+            // while benchmarking the already loaded graphs on a C1 instance.
+            if budget != 0 && shape.width > 1 && shape.tokens != budget.min(shape.batch * shape.width) {
+                continue;
+            }
             if shape.batch > self.limits.max_active.next_power_of_two()
                 || !self.speculative_catalog[shape.batch.ilog2() as usize].contains(&shape.width) { continue; }
             if self.speculative_fixed_width.is_some()

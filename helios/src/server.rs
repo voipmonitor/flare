@@ -424,6 +424,19 @@ impl Server {
             *accepting = true;
         }
     }
+    /// Selects a resident C1 verification-row budget between benchmark requests.
+    pub fn set_benchmark_rows(&self, rows: usize) -> Result<()> {
+        if self.model.config().limits.max_active != 1 || !self.wait_for_requests(Duration::ZERO) {
+            return Err("resident verification comparison requires a drained, admission-paused C1 instance".into());
+        }
+        let trace = &self.model.metrics().scheduler_trace;
+        if rows != 0 && !trace.catalog.get().is_some_and(|catalog| catalog.iter().any(|g|
+            g.kind == crate::execution::GraphKind::Speculative && g.batch == 1 && g.packed == rows)) {
+            return Err("requested verification-row budget is absent from the captured catalog".into());
+        }
+        trace.benchmark_rows.store(rows, Ordering::Relaxed);
+        Ok(())
+    }
     /// Waits for HTTP preparation and response owners after admission is paused.
     /// A timed-out wait leaves the server paused and permits resuming admission.
     pub fn wait_for_requests(&self, timeout: Duration) -> bool {

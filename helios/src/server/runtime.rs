@@ -550,6 +550,7 @@ impl ModelRuntime {
                         return shutdown;
                     }
                 };
+                scheduler.benchmark_rows = Some(worker_metrics.scheduler_trace.benchmark_rows.clone());
                 if let Err(error) = scheduler
                     .graph_durations(&executor.manifest().graphs)
                     .and_then(|()| scheduler.configure_policy(policy))

@@ -727,6 +727,15 @@ impl Metrics {
             ));
         }
 
+        if let Some(catalog) = self.scheduler_trace.catalog.get() {
+            let _ = writeln!(text, "# HELP flare_graph_gpu_nanoseconds_total Sum of the slowest measured rank's CUDA event duration for each prepared graph.\n# TYPE flare_graph_gpu_nanoseconds_total counter");
+            let _ = writeln!(text, "# HELP flare_graph_gpu_samples_total Graph completions with a measured GPU interval.\n# TYPE flare_graph_gpu_samples_total counter");
+            for graph in catalog {
+                let name = graph.name.replace('\\', "\\\\").replace('\"', "\\\"").replace('\n', "\\n");
+                let _ = writeln!(text, "flare_graph_gpu_nanoseconds_total{{graph=\"{name}\"}} {}", graph.gpu_elapsed_ns.load(Ordering::Relaxed));
+                let _ = writeln!(text, "flare_graph_gpu_samples_total{{graph=\"{name}\"}} {}", graph.gpu_samples.load(Ordering::Relaxed));
+            }
+        }
         for (name, help, counts) in [
             ("execution_nanoseconds_total", "Raw execution time by scheduler selection reason, including readiness stalls and isolated host handoff.", &self.scheduler_trace.execution_ns),
             ("executions_total", "Completed physical executions by scheduler selection reason; each generation round counts once.", &self.scheduler_trace.executions),

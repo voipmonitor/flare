@@ -526,6 +526,8 @@ mod tests {
                 tokens: 1024,
                 prefill: 0,
                 packed: 0,
+                gpu_elapsed_ns: Default::default(),
+                gpu_samples: Default::default(),
             },
             GraphLabel {
                 name: "speculative_4_6".into(),
@@ -534,6 +536,8 @@ mod tests {
                 tokens: 6,
                 prefill: 0,
                 packed: 0,
+                gpu_elapsed_ns: Default::default(),
+                gpu_samples: Default::default(),
             },
             GraphLabel {
                 name: "snapshot_1".into(),
@@ -542,6 +546,8 @@ mod tests {
                 tokens: 1,
                 prefill: 0,
                 packed: 0,
+                gpu_elapsed_ns: Default::default(),
+                gpu_samples: Default::default(),
             },
         ]
     }
