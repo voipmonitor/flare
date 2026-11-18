@@ -8,6 +8,8 @@
 
 mod archive;
 mod cache_memory;
+mod comparison;
+pub use comparison::inspect_plan as inspect_resident_comparison_plan;
 #[cfg(test)]
 mod cooperative_tests;
 mod describe;
@@ -45,6 +47,7 @@ pub use protection::{
     PayloadVerifiedCore, Publisher, VerifiedCore, verify_core_metadata,
 };
 use std::path::Path;
+use std::collections::HashSet;
 mod selection;
 mod serving;
 #[cfg(test)]
@@ -92,6 +95,8 @@ pub struct NativeResources {
     peer_readers: HashMap<u64, Vec<(usize, i32)>>,
     allocations: HashMap<String, Storage>,
     modules: Vec<Handle>,
+    hot_modules: Vec<Handle>,
+    hot_retained: Vec<Handle>,
     functions: HashMap<usize, Handle>,
     templates: Vec<Handle>,
     executables: Vec<Handle>,
@@ -351,6 +356,7 @@ impl NativeResources {
                 peer_readers: HashMap::new(),
                 allocations: HashMap::new(),
                 modules: vec![],
+                hot_modules:vec![], hot_retained:vec![],
                 functions: HashMap::new(),
                 templates: vec![],
                 executables: vec![],
@@ -659,7 +665,7 @@ impl NativeResources {
         Ok(())
     }
 
-    unsafe fn prepare_kernels<F: payload::Files>(
+    unsafe fn prepare_kernels<F: payload::ExecutableFiles>(
         &mut self,
         files: &F,
         core: &Core,
@@ -670,7 +676,7 @@ impl NativeResources {
             driver.check("cuCtxSetCurrent", (driver.context_set)(self.context))?;
             let mut modules = HashMap::new();
             for module in &core.modules {
-                let image = files.read(core, &module.file)?;
+                let image = files.image(core, &module.file)?;
                 if !image.starts_with(b"\x7fELF") {
                     return Err(invalid("module image is not a compiled cubin"));
                 }
@@ -688,7 +694,7 @@ impl NativeResources {
                         "cuModuleGetGlobal_v2",
                         (driver.module_global)(&mut address, &mut size, handle, symbol.as_ptr()),
                     )?;
-                    let mut contents = files.read(core, &global.file)?;
+                    let mut contents = files.image(core, &global.file)?;
                     if size != global.nbytes || contents.len() != size {
                         return Err(invalid(format!(
                             "module global size mismatch for {}",
@@ -750,12 +756,17 @@ impl NativeResources {
         Ok(())
     }
 
-    unsafe fn prepare_graphs<F: payload::Files>(
+    unsafe fn prepare_graphs<F: payload::ExecutableFiles>(
         &mut self,
         files: &F,
         core: &Core,
         phase: &Phase,
     ) -> Result<()> {
+        unsafe { self.prepare_graphs_bounded(files,core,phase,&HashSet::new()) }
+    }
+
+    unsafe fn prepare_graphs_bounded<F: payload::ExecutableFiles>(&mut self,files:&F,core:&Core,phase:&Phase,
+        frozen:&HashSet<usize>) -> Result<()> {
         let driver = self.driver.clone();
         unsafe {
             driver.check("cuCtxSetCurrent", (driver.context_set)(self.context))?;
@@ -778,7 +789,7 @@ impl NativeResources {
                 driver.check("cuGraphCreate", (driver.graph_create)(&mut handle, 0))?;
                 self.templates.push(handle);
                 let mut nodes = Vec::with_capacity(graph.node_count);
-                let mut records = files.records(core, &graph.resource)?;
+                let mut records = files.graph_records(core, &graph.resource)?;
                 for _ in 0..graph.node_count {
                     let node = protobuf::node(records.read()?)?;
                     core.validate_node(&node)?;
@@ -800,12 +811,15 @@ impl NativeResources {
                             arguments,
                             attributes,
                         } => {
-                            let function_handle = self.functions[function];
+                            let function_handle = *self.functions.get(function).ok_or_else(|| invalid("graph references an unloaded function"))?;
                             let allowance =
                                 dynamic_shared.get_mut(&(function_handle as usize)).unwrap();
                             // Captured nodes retain their launch requirements even if later
                             // preparation lowers the function's dynamic shared-memory allowance.
                             if *shared > *allowance {
+                                if frozen.contains(&(function_handle as usize)) {
+                                    return Err(invalid("replacement requires a larger dynamic shared limit on a frozen function"));
+                                }
                                 let bytes = i32::try_from(*shared).map_err(|_| {
                                     invalid(
                                         "kernel shared-memory size exceeds CUDA's attribute range",
@@ -1019,7 +1033,9 @@ impl NativeResources {
                 self.templates.pop();
                 phase.advance(1);
             }
-            self.functions.clear();
+            if !core.graphs.iter().any(|g| g.name.starts_with(crate::execution::graph_comparison::CONTROL_PREFIX)) {
+                self.functions.clear();
+            }
             driver.check("cuCtxSynchronize", (driver.context_sync)())?;
         }
         Ok(())
@@ -1146,8 +1162,9 @@ impl Drop for NativeResources {
                 std::mem::forget(self.driver.clone());
                 return;
             }
-            for executable in self.executables.iter().rev() {
-                (self.driver.executable_destroy)(*executable);
+            let mut destroyed=HashSet::new();
+            for executable in self.executables.iter().chain(&self.hot_retained).rev() {
+                if destroyed.insert(*executable as usize) { (self.driver.executable_destroy)(*executable); }
             }
             for graph in self.templates.iter().rev() {
                 (self.driver.graph_destroy)(*graph);
@@ -1155,7 +1172,7 @@ impl Drop for NativeResources {
             for event in self.events.values() {
                 (self.driver.event_destroy)(*event);
             }
-            for module in self.modules.iter().rev() {
+            for module in self.modules.iter().chain(&self.hot_modules).rev() {
                 (self.driver.module_unload)(*module);
             }
             for allocation in self.allocations.values() {

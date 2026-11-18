@@ -91,6 +91,25 @@ impl ServingSession {
         &self.server
     }
 
+    /// Replace an idle diagnostic candidate while its control, contexts and weights remain resident.
+    pub fn reload_benchmark_graphs(&self,path:&std::path::Path,id:&str)->Result<serde_json::Value> {
+        if !path.is_absolute() || id.len()!=64 || !id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err("graph replacement requires an absolute path and a lowercase SHA-256 core ID".into());
+        }
+        let server=&self.server;
+        if !server.healthy() || !server.wait_for_requests(std::time::Duration::ZERO) {
+            return Err("graph replacement requires drained, paused admission".into());
+        }
+        let metrics=server.model.metrics();
+        let status=metrics.snapshot(server.model.config().has_learned_drafts());
+        if status.active!=0 || status.pending!=0 || server.model.config().limits.max_active!=1 {
+            return Err("graph replacement requires an idle C1 instance".into());
+        }
+        let comparison=metrics.scheduler_trace.benchmark_comparison.get().ok_or("no native graph bank")?;
+        let mut owner=self.owner.lock().unwrap_or_else(|e|e.into_inner());
+        owner.value.as_mut().ok_or("native resources were released")?.reload_comparison(comparison,path,id)
+    }
+
     /// Joins HTTP and model workers. Drop the session to release a drained model;
     /// an unconfirmed drain retains its resources until process exit.
     pub fn close(&self) -> Shutdown {

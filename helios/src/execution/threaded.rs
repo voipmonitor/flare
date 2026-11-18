@@ -298,6 +298,9 @@ impl ThreadedExecutor {
         let Some(fence) = self.local.validate_submission(graph, uploads, grammar)? else {
             return Ok(None);
         };
+        if let Some(c) = &self.local.manifest().benchmark_comparison {
+            if !c.session.try_begin_frame()? { return Ok(None); }
+        }
         let step = Arc::new(Step {
             fence, graph, grammar,
             candidate: self.local.manifest().benchmark_comparison.as_ref().is_some_and(|c| c.session.candidate()),
@@ -381,6 +384,7 @@ impl ThreadedExecutor {
             agreement(&root, &completion).map_err(|error| invalid(format!("rank {}: {error}", index + 1)))?;
             root.timing.merge_rank(index + 1, completion.timing)?;
         }
+        if let Some(c) = &self.local.manifest().benchmark_comparison { c.session.finish_frame()?; }
         root.timing.queued = frame.queued;
         root.timing.wall_ns = frame.dispatched.elapsed().as_nanos().min(u64::MAX as u128) as u64;
         Ok(Some(root))

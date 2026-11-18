@@ -78,6 +78,7 @@ fn pair_rank(
     control: &wire::RankBody,
     candidate: &wire::RankBody,
     next_id: &mut u64,
+    mirror: &BTreeSet<String>,
 ) -> AnyResult<(wire::RankBody, Vec<String>)> {
     if control.graphs.len() != candidate.graphs.len()
         || !candidate.functions.starts_with(&control.functions)
@@ -103,7 +104,7 @@ fn pair_rank(
             .resources
             .get(idx)
             .ok_or("missing control graph resource")?;
-        if src == &candidate.resources[idx] && old == new {
+        if src == &candidate.resources[idx] && old == new && !mirror.contains(&old.name) {
             continue;
         }
         if !old.name.starts_with("speculative") {
@@ -137,7 +138,7 @@ fn pair_rank(
     Ok((paired, names))
 }
 
-fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path) -> AnyResult<()> {
+fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path, mirror: &BTreeSet<String>) -> AnyResult<()> {
     if destination.exists() {
         return Err("package destination already exists".into());
     }
@@ -202,7 +203,7 @@ fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path) 
     package_id.update(&protection::sha256(&base.envelope));
     let mut variants = None;
     for (i, (a, b)) in original.ranks().iter().zip(verified.ranks()).enumerate() {
-        let (paired, names) = pair_rank(a, b, &mut next_id)?;
+        let (paired, names) = pair_rank(a, b, &mut next_id, mirror)?;
         if variants.as_ref().is_some_and(|v| *v != names) {
             return Err("alternate graph names differ between ranks".into());
         }
@@ -280,11 +281,29 @@ fn run(control_path: &Path, source: &Path, destination: &Path, identity: &Path) 
 }
 fn main() -> AnyResult<()> {
     let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
-    let [control, source, dest, identity] = &args[..] else {
-        return Err(
-            "usage: kimi-paired-package CONTROL CANDIDATE OUTPUT DEVELOPMENT_IDENTITY_DIRECTORY"
-                .into(),
-        );
+    if let [mode, source, new, id, identity] = &args[..] {
+        if mode == Path::new("--check-load") {
+            let keys:Vec<Publisher>=serde_json::from_slice(&fs::read(identity.join("development-publisher.json"))?)?;
+            let info=flare_helios::runtime_core::inspect_resident_comparison_plan(source,new,id.to_str().ok_or("invalid core ID")?,&keys)?;
+            println!("{}",serde_json::to_string_pretty(&info)?);
+            return Ok(());
+        }
+    }
+    if let [mode,source,dest,identity,names @ ..]=&args[..] {
+        if mode==Path::new("--reference-bank") {
+            let wanted:BTreeSet<_>=names.iter().map(|v|v.to_str().ok_or("invalid graph name").map(str::to_owned)).collect::<Result<_,_>>()?;
+            if wanted.is_empty() || wanted.len()!=names.len() {return Err("specify distinct speculative graph names".into());}
+            let meta=Metadata::open(source)?;
+            let keys:Vec<Publisher>=serde_json::from_slice(&fs::read(identity.join("development-publisher.json"))?)?;
+            let v=protection::verify(&meta.envelope,&keys,Selection::Deployment{deployment:0,rank:None})?;
+            if !wanted.iter().all(|n|n.starts_with("speculative") && v.ranks().iter().all(|r|r.graphs.iter().any(|g|&g.name==n))) {
+                return Err("requested reference-bank graph missing".into());
+            }
+            return run(source,source,dest,identity,&wanted);
+        }
+    }
+    let [control,source,dest,identity]=&args[..] else {
+        return Err("usage: kimi-paired-package CONTROL CANDIDATE OUTPUT IDENTITY | --reference-bank SOURCE OUTPUT IDENTITY GRAPH... | --check-load RESIDENT NEXT NEXT_CORE_ID IDENTITY".into());
     };
-    run(control, source, dest, identity)
+    run(control,source,dest,identity,&BTreeSet::new())
 }

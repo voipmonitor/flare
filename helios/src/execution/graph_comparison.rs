@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Select one of two preinstantiated speculative graph handles on a single-host C1 benchmark.
 use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,Mutex,
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
 };
 
 pub const CONTROL_PREFIX: &str = "paired-control--";
@@ -14,8 +14,20 @@ pub struct GraphComparison {
     names: Vec<String>,
     candidate: AtomicBool,
     launches: Vec<Vec<[AtomicU64; 2]>>,
+    overrides: Vec<Vec<AtomicUsize>>,
+    loaded: Mutex<Option<String>>,
+    available: AtomicBool,
+    gate: Mutex<Gate>,
+
 }
 
+#[derive(Debug,Default)]
+struct Gate { closed:bool, outstanding:usize, broken:bool }
+
+pub(crate) struct Quiescent<'a>(&'a GraphComparison);
+impl Drop for Quiescent<'_> {
+    fn drop(&mut self) { self.0.gate.lock().unwrap_or_else(|e|e.into_inner()).closed=false; }
+}
 impl GraphComparison {
     pub(crate) fn new(names: Vec<String>, ranks: usize) -> Arc<Self> {
         let launches = (0..ranks)
@@ -25,11 +37,44 @@ impl GraphComparison {
                     .collect()
             })
             .collect();
+        let overrides=(0..ranks).map(|_|(0..names.len()).map(|_|AtomicUsize::new(0)).collect()).collect();
         Arc::new(Self {
+            overrides, loaded: Mutex::new(None), available:AtomicBool::new(true), gate:Mutex::default(),
             names,
             candidate: AtomicBool::new(false),
             launches,
         })
+    }
+    pub(crate) fn try_begin_frame(&self) -> crate::Result<bool> {
+        let mut g=self.gate.lock().unwrap_or_else(|e|e.into_inner());
+        if g.broken { return Err("comparison CUDA drain could not be confirmed".into()); }
+        if g.closed { return Ok(false); }
+        g.outstanding+=1;Ok(true)
+    }
+    pub(crate) fn finish_frame(&self) -> crate::Result<()> {
+        let mut g=self.gate.lock().unwrap_or_else(|e|e.into_inner());
+        g.outstanding=g.outstanding.checked_sub(1).ok_or("unexpected comparison completion")?;Ok(())
+    }
+    pub(crate) fn quiesce(&self) -> crate::Result<Quiescent<'_>> {
+        let mut g=self.gate.lock().unwrap_or_else(|e|e.into_inner());
+        if g.closed||g.outstanding!=0||g.broken {return Err("comparison has pending frames or an unconfirmed drain".into());}
+        g.closed=true;Ok(Quiescent(self))
+    }
+    pub(crate) fn healthy(&self)->bool{!self.gate.lock().unwrap_or_else(|e|e.into_inner()).broken}
+    pub(crate) fn poison(&self){self.gate.lock().unwrap_or_else(|e|e.into_inner()).broken=true;}
+    pub(crate) fn initial(&self,id:String){*self.loaded.lock().unwrap_or_else(|e|e.into_inner())=Some(id);}
+    pub(crate) fn disable(&self){
+        self.select(false);self.available.store(false,Ordering::Release);
+        *self.loaded.lock().unwrap_or_else(|e|e.into_inner())=None;
+    }
+    pub(crate) fn available(&self)->bool{self.available.load(Ordering::Acquire)}
+    pub(crate) fn loaded(&self)->Option<String>{self.loaded.lock().unwrap_or_else(|e|e.into_inner()).clone()}
+    pub(crate) fn install(&self,id:String,handles:&[Vec<usize>]) {
+        for (rank,new) in self.overrides.iter().zip(handles) {
+            for (slot,&handle) in rank.iter().zip(new) { slot.store(handle,Ordering::Release); }
+        }
+        *self.loaded.lock().unwrap_or_else(|e|e.into_inner())=Some(id);
+        self.available.store(true,Ordering::Release);
     }
     pub(crate) fn names(&self) -> &[String] {
         &self.names
@@ -90,10 +135,10 @@ impl RankGraphComparison {
     }
 
     pub(crate) fn handle(&self, index: usize, candidate_handle: usize, candidate: bool) -> usize {
-        if candidate {
-            return candidate_handle;
-        }
-        self.control[index].map_or(candidate_handle, |(handle, _)| handle)
+        let Some((control,ordinal))=self.control[index] else {return candidate_handle;};
+        if !candidate || !self.session.available() {return control;}
+        let handle=self.session.overrides[self.rank][ordinal].load(Ordering::Acquire);
+        if handle==0 {candidate_handle} else {handle}
     }
 
     pub(crate) fn record(&self, index: usize, candidate: bool) {
@@ -107,6 +152,31 @@ impl RankGraphComparison {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_replacement_gate_requires_positive_completion_and_commits_one_generation() {
+        let shared=GraphComparison::new(vec!["speculative4".into()],2);
+        let r0=RankGraphComparison::new(shared.clone(),0,vec![Some((11,0))]);
+        let r1=RankGraphComparison::new(shared.clone(),1,vec![Some((12,0))]);
+        assert!(shared.try_begin_frame().unwrap());
+        assert!(shared.quiesce().is_err());
+        shared.finish_frame().unwrap();
+        let ready=shared.quiesce().unwrap();
+        assert!(!shared.try_begin_frame().unwrap());
+        shared.disable();
+        assert!(!shared.available());
+        assert_eq!(r0.handle(0,15,true),11);
+        assert_eq!(r1.handle(0,16,true),12);
+        shared.install("tested".into(),&[vec![21],vec![22]]);
+        drop(ready);
+        assert_eq!(r0.handle(0,15,true),21);
+        assert_eq!(r1.handle(0,16,true),22);
+        assert!(shared.try_begin_frame().unwrap());
+        shared.finish_frame().unwrap();
+        shared.poison();
+        assert!(shared.try_begin_frame().is_err());
+        assert!(shared.quiesce().is_err());
+    }
 
     #[test]
     fn latched_role_preserves_all_rank_choices_and_counts_only_paired_launches() {

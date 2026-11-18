@@ -2656,6 +2656,10 @@ pub struct PayloadAuthorizedCore {
 }
 
 impl PayloadAuthorizedCore {
+    pub(super) fn comparison_origin(&self) -> super::comparison::Origin {
+        super::comparison::Origin { path: self.source.path.clone(),
+            envelope_digest: self.envelope_digest(),core_id:self.source.authorized.verified().core_id(), publisher: self.source.authorized.verified().publisher().clone() }
+    }
     /// Verified identity of the selected deployment: model, hardware, TP, architecture.
     /// Signed cluster topology of the authorized deployment, when declared.
     pub fn cluster_identity(&self) -> Option<super::model::ClusterIdentity> {

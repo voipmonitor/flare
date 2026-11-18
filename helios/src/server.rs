@@ -446,9 +446,17 @@ impl Server {
         }
         let pair = self.model.metrics().scheduler_trace.benchmark_comparison.get()
             .ok_or("no resident comparison graphs were loaded")?;
+        if !pair.healthy() {return Err("comparison requires shutdown after unconfirmed CUDA drain".into());}
+        if candidate && !pair.available() { return Err("no usable candidate generation is installed".into()); }
         pair.select(candidate);
-        Ok(serde_json::json!({"role": if candidate {"candidate"} else {"control"},
-            "graphs": pair.names(), "launches": pair.counts()}))
+        self.benchmark_graph_status()
+    }
+
+    pub fn benchmark_graph_status(&self) -> Result<serde_json::Value> {
+        let pair=self.model.metrics().scheduler_trace.benchmark_comparison.get()
+            .ok_or("no resident comparison graphs were loaded")?;
+        Ok(serde_json::json!({"role": if pair.candidate() {"candidate"} else {"control"}, "candidate_available":pair.available(),"drain_confirmed":pair.healthy(),
+            "graphs": pair.names(), "launches": pair.counts(), "loaded_comparison":pair.loaded()}))
     }
     /// Waits for HTTP preparation and response owners after admission is paused.
     /// A timed-out wait leaves the server paused and permits resuming admission.

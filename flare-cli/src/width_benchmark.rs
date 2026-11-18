@@ -12,7 +12,8 @@ impl Control {
         Self { dir, last: String::new() }
     }
 
-    pub fn poll(&mut self, server: &flare_helios::server::Server) {
+    pub fn poll(&mut self, session: &flare_helios::server::ServingSession) {
+        let server=session.server();
         let command = match fs::read_to_string(self.dir.join("request")) {
             Ok(s) => s,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return,
@@ -26,6 +27,13 @@ impl Control {
             return;
         } else {
             match words.as_slice() {
+                [_, "status"] => server.benchmark_graph_status().map_err(|e|e.to_string()),
+                [_, "load", id, paths @ ..] if !paths.is_empty() => {
+                    let mut rest=command.trim();
+                    for _ in 0..3 { rest=rest[rest.find(char::is_whitespace).expect("validated load fields")..].trim_start(); }
+                    let path=std::path::PathBuf::from(rest);
+                    session.reload_benchmark_graphs(&path,id).map_err(|e|e.to_string())
+                }
                 [_, "role", role @ ("control" | "candidate")] => server.set_benchmark_graph_role(*role == "candidate")
                     .map_err(|e| e.to_string()),
                 [_, rows] => rows.parse::<usize>().map_err(|_| "invalid verification row budget".to_owned())

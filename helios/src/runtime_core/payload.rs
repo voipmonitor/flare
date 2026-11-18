@@ -128,6 +128,16 @@ pub(super) trait Files: Sync {
     ) -> crate::Result<Box<dyn std::io::Read + 'a>>;
 }
 
+/// Executable-only reads let diagnostic restores authenticate programs without opening weight containers.
+pub(super) trait ExecutableFiles {
+    fn image(&self, core: &Core, key: &str) -> crate::Result<Vec<u8>>;
+    fn graph_records<'a>(&'a self, core: &'a Core, key: &str) -> crate::Result<RecordReader<'a>>;
+}
+impl<F: Files> ExecutableFiles for F {
+    fn image(&self, core:&Core,key:&str)->crate::Result<Vec<u8>> { self.read(core,key) }
+    fn graph_records<'a>(&'a self,core:&'a Core,key:&str)->crate::Result<RecordReader<'a>> {self.records(core,key)}
+}
+
 const CHUNK: usize = 4 << 20;
 const MAX_RECORD: usize = 1 << 20;
 const SLOTS: usize = 4;

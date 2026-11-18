@@ -19,6 +19,7 @@ use blake2::{Blake2b, Digest, digest::consts::U32};
 use std::{collections::HashSet, path::Path, thread};
 
 pub struct NativeModel {
+    pub(super) comparison_origin: Option<super::comparison::Origin>,
     pub(super) ranks: Vec<NativeResources>,
     _core_files: Vec<std::sync::Arc<std::fs::File>>,
     pub(super) server_config: serde_json::Value,
@@ -276,6 +277,10 @@ impl NativeModel {
             return Err(invalid("GPU label count must match selected devices"));
         }
         let phase = progress.phase("Prepare model", None);
+        let mut origin = match &authorized.kind {
+            AuthorizedKind::Payload(p) => Some(p.comparison_origin()),
+            _ => None,
+        };
         let (mut descriptor, mut ready_cores, files) = match authorized.kind {
             AuthorizedKind::Legacy { archive, index } => (index, None, FilesRef::Legacy(archive)),
             AuthorizedKind::Payload(core) => {
@@ -592,7 +597,11 @@ impl NativeModel {
         // Keep every shard's write/delete exclusion through unbuffered guards;
         // the buffered startup readers close when loading returns.
         let core_files = files.retained_files()?;
+        if !cores.iter().any(|c| c.graphs.iter().any(|g| g.name.starts_with(crate::execution::graph_comparison::CONTROL_PREFIX))) {
+            origin=None;
+        }
         let mut model = Self {
+            comparison_origin: origin,
             _core_files: core_files,
             ranks: Vec::new(),
             server_config,
@@ -913,7 +922,11 @@ impl NativeModel {
             if self.cluster.is_some() || self.ranks.len() != 16 {
                 return Err(invalid("resident comparison requires sixteen ranks on one host"));
             }
-            Some(GraphComparison::new(names, self.ranks.len()))
+            let session=GraphComparison::new(names,self.ranks.len());
+            if let Some(origin)=self.comparison_origin.as_ref() {
+                session.initial(super::comparison::sha_hex(&origin.core_id));
+            }
+            Some(session)
         };
         self.ranks
             .iter()
@@ -1182,6 +1195,7 @@ mod tests {
     fn disabled_offload_needs_no_model_metadata_or_cuda_resources() {
         let progress = StartupProgress::silent();
         let mut model = NativeModel {
+            comparison_origin: None,
             _core_files: Vec::new(),
             ranks: Vec::new(),
             server_config: serde_json::Value::Null,

@@ -658,7 +658,7 @@ fn serve_local(
     let mut controls = benchmark_directory.map(width_benchmark::Control::new);
     while !STOP.load(Ordering::Relaxed) && server.wait(Duration::from_millis(250)) {
         if let Some(control) = &mut controls {
-            control.poll(server);
+            control.poll(&session);
         }
     }
     server.stop_dashboard();
