@@ -144,6 +144,13 @@
     autotuning against existing collectives. Cover graph replay, concurrent
     channels, rollover, and complete-collective latency on the target topology.
 
+[ ] Test Kimi K3.1 latent-column reduce-scatter plus one FP32 RMS-statistic
+    all-reduce per token before other MoE collective changes. Compare against
+    the latent all-reduce at TP16, prefill 4096, context 0. Preserve BF16
+    normalization rounding and validate numerical agreement and complete graph
+    latency. The candidate reduces latent replication but adds a serial
+    collective stage.
+
 [ ] Review fusion of pooled DeepSeek V4.1 indexer lengths: captured graphs split
     clamp from amax and retain explicit copy kernels. Measure complete GPU steps
     before changing shared storage lowering.
