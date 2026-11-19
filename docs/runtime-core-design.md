@@ -688,8 +688,9 @@ identical bytes per page, byte offset within the plane, and mapped length. Their
 row positions and logical page coverage stay the same. It then reorders whole chunks inside an
 uninterrupted interval of one snapshot row, merging adjacent spans of the same
 KV plane into one backing allocation and one alias mapping. Only complete chunks
-wholly contained in one row are reordered or merged; spans crossing row boundaries
-and partial mappings keep their row positions and lengths.
+wholly contained in one row are reordered or merged. A plane span whose prefix
+backs the final snapshot uses two physical handles. The snapshot maps the whole
+first handle and the remaining bytes have only their KV mapping.
 
 These transformations preserve every plane's byte coverage, physical byte
 count, snapshot address and stride, and the exact set of KV pages conflicting
@@ -697,6 +698,25 @@ with each snapshot. The scheduler consumes the same exclusion ranges. Reader
 permissions remain allocation-specific. The layout uses ordinary CUDA VMM
 allocations at the recorded core addresses and requires no core re-export,
 additional framebuffer reserve, allocation retry, or reduced cache capacity.
+
+Before allocating backing, Helios counts one physical handle for each fixed
+allocation or cache chunk and one mapping for each actual device reader of each
+virtual address. If the estimated total reaches the RM handle range, the planner
+packs the longest contiguous span available in a single plane at each snapshot
+address. A row can extend toward high page IDs already covered by preceding
+rows. Each snapshot retains its admissible low KV prefix, and each prefix of
+snapshot slots excludes a subset of its previous pages. Individually retained
+snapshots can exclude additional pages when active KV is fragmented.
+
+If those spans still exceed the mapping range, the planner groups KV pages in
+successively wider bands derived from CUDA allocation granularity and bytes per
+page. It measures each geometry's handle count before creating any GPU backing
+and keeps reductions in that count. The scheduler receives the actual
+intersection of each snapshot with its KV planes as an enclosing page range.
+Wider bands can exclude more pages while a snapshot is retained. Both policies
+keep the planned number of KV pages, snapshot slots and physical bytes. The RM
+estimate covers the model's VMM objects. Other driver objects also consume
+handles.
 
 Native startup and C1/C4 generation with 32K prefill are qualified for Kimi K3.1
 Pro TP16 cores using DCP8 and DCP16 on sixteen RTX PRO 6000 Blackwell GPUs with

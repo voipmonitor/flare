@@ -867,13 +867,14 @@ impl NativeModel {
                 summary.push_str(&format!(" · KV capped at {active} contexts"));
             }
         }
-        progress.phase("Plan cache", None).finish(summary);
         let execution = 1 + active as u64 * width;
         if rows > local_rows || pages > local_pages || rows < execution {
             return Err(invalid(
                 "ranks agreed on a cache capacity this rank cannot back",
             ));
         }
+        summary.push_str(&format!(" · {pages} KV pages · {} shared snapshot slots", rows - execution));
+        progress.phase("Plan cache", None).finish(summary);
         unsafe {
             self.allocate_cache_capacity(
                 cores, progress, &contract, rows, pages, execution, &limiting,
@@ -899,7 +900,7 @@ impl NativeModel {
             .iter()
             .map(|core| cache_geometry(core, logical_page_tokens, rows, pages))
             .collect::<Result<Vec<_>>>()?;
-        let layouts = cores
+        let mut layouts = cores
             .iter()
             .zip(&geometry)
             .map(|(core, geometry)| {
@@ -922,6 +923,15 @@ impl NativeModel {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
+        let (original, planned) = super::cache_memory::compact_cache_layouts(
+            &self.ranks, &geometry, &mut layouts, execution,
+        )?;
+        if original != planned {
+            progress.phase("Place cache backing", None).finish(format!(
+                "{original} → {planned} estimated VMM handles across {} local GPUs",
+                self.ranks.len(),
+            ));
+        }
         let mut aliases = vec![u32::MAX..0; snapshots as usize];
         for layout in &layouts {
             for (union, range) in aliases.iter_mut().zip(&layout.aliases) {
