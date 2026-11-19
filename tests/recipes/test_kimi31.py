@@ -235,7 +235,11 @@ def test_paired_route_gather_uses_two_row_blocks_only_for_p8(monkeypatch, rows, 
         local_down, local_router, torch.zeros(896), torch.zeros((rows, 3584), dtype=torch.bfloat16),
         torch.zeros((rows, 16)), torch.zeros((rows, 16), dtype=torch.int32),
         runtime=runtime, session=None, coordinator=None, name="route")
-    assert operation.plan.query["call"]["row_blocks"] == expected_blocks
+    if rows == 4:
+        assert operation.plan.query["surface"] == "DcpAllToAll.all_gather_pair_kimi_topk"
+        assert operation.plan.query["call"]["out_logits"].shape == (4, 896)
+    else:
+        assert operation.plan.query["call"]["row_blocks"] == expected_blocks
     assert operation.pair is None
 
 

@@ -4,9 +4,9 @@
 """Kimi K3 decode routing: latent-down and router shards gathered with expert selection.
 
 Each rank projects its rows of the routed-expert down projection and its experts' router logits.
-One b12x exchange gathers both shards; a single decode row also selects Kimi's 16 experts inside
-that exchange, and two to eight rows select them with b12x's prepared top-16 afterwards. This
-replaces the router all-gather, the separate top-k, and the latent all-reduce of the general path.
+One b12x exchange gathers both shards. A single row selects Kimi's 16 experts inside the
+exchange. For four rows on 16 ranks, preparation measures the complete gather and selection
+with either one kernel or two. Other multi-row shapes use the prepared standalone top-16.
 """
 
 import itertools
@@ -61,9 +61,13 @@ class PreparedRouteGather:
         self.latent, self.weights, self.ids = latent, weights, ids
         ranks = tuple(dist.get_process_group_ranks(runtime.exchange_group))
         requests = []
-        if rows == 1:
+        self.combined = rows == 1 or (rows == 4 and world == 16)
+        if self.combined:
             self.fused = dict(local_down=local_down, local_router=local_router, correction_bias=correction_bias,
                               out_down=latent, topk_weights=weights, topk_ids=ids)
+            if rows > 1:
+                self.logits = torch.zeros((rows, 896), dtype=torch.float32, device=latent.device)
+                self.fused["out_logits"] = self.logits
             self.plan = pcie.plan(pcie.query_from_runtime(runtime, surface="DcpAllToAll.all_gather_pair_kimi_topk",
                                                           call=self.fused), runtime=runtime)
             requests.append(self.plan.request(name=name, prepare_call=lambda state: PreparedCall(
@@ -109,9 +113,10 @@ def _route_gather(local_down: torch.Tensor, local_router: torch.Tensor, correcti
                   logits: torch.Tensor, handle: int) -> None:
     owner = _OWNERS[handle]
     runtime = owner.runtime
-    if owner.rows == 1:
+    if owner.combined:
+        outputs = {} if owner.rows == 1 else {"out_logits": logits}
         runtime.all_gather_pair_kimi_topk(local_down, local_router, correction, latent, weights, ids,
-                                        plan=owner.plan)
+                                         plan=owner.plan, **outputs)
         return
     runtime.all_gather_pair(local_down, local_router, latent, logits, plan=owner.plan, threads=512)
     runtime.kimi_topk16(logits, correction, weights, ids, plan=owner.select_plan)
