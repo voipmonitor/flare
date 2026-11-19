@@ -75,7 +75,7 @@ def pack_candidates(indices, scores, output, shards):
 def _selection_slots(Selected, Positions, Tables, Owners, Slots, Counts, Rank,
                      columns, table_stride, cache_pages, WORLD: tl.constexpr,
                      LOCAL: tl.constexpr, TOP_K: tl.constexpr, PAGE: tl.constexpr,
-                     GLOBAL_RECORDS: tl.constexpr):
+                     GLOBAL_RECORDS: tl.constexpr, LOGICAL_IDS: tl.constexpr):
     row = tl.program_id(0)
     column = tl.arange(0, TOP_K)
     token = tl.load(Selected + row * TOP_K + column).to(tl.int64)
@@ -93,6 +93,8 @@ def _selection_slots(Selected, Positions, Tables, Owners, Slots, Counts, Rank,
     tl.store(Slots + row * TOP_K + column, -1)
     tl.debug_barrier()
     slot = page * PAGE + local % PAGE
+    if LOGICAL_IDS:
+        owner = token
     if GLOBAL_RECORDS:
         owner = tl.full((TOP_K,), 0, tl.int64)
         slot = token
@@ -102,13 +104,14 @@ def _selection_slots(Selected, Positions, Tables, Owners, Slots, Counts, Rank,
 
 
 def selection_slots(selected, positions, tables, owners, slots, counts, shards, cache_pages, *, local,
-                    global_records=False):
+                    global_records=False, logical_ids=False):
     """Compact valid selections without changing their order.
 
     ``global_records`` addresses a local global-position slab instead of peer
-    page pools; the original page-validity and causal masks still apply.
+    page pools; the original page-validity and causal masks still apply. With
+    `logical_ids`, the owner output carries the full token ID for each physical slot.
     """
     torch.library.wrap_triton(_selection_slots)[(selected.shape[0],)](
         selected, positions, tables, owners, slots, counts, shards.index,
         tables.shape[1], tables.stride(0), cache_pages, WORLD=shards.world, LOCAL=local,
-        TOP_K=TOPK, PAGE=PAGE_TOKENS, GLOBAL_RECORDS=global_records, num_warps=8)
+        TOP_K=TOPK, PAGE=PAGE_TOKENS, GLOBAL_RECORDS=global_records, LOGICAL_IDS=logical_ids, num_warps=8)
