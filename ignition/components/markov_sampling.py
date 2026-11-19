@@ -414,9 +414,13 @@ class PreparedMarkovProposals:
         workspace=None,
         proposal_capacity=None,
     ):
-        if base.ndim != 3:
+        if base.ndim != 3 or tokens.ndim != 2:
             raise ValueError("fused Markov logits require request, draft and vocabulary dimensions")
-        batch, depth, vocab = base.shape
+        batch, available, vocab = base.shape
+        depth = tokens.shape[1]
+        self.active_depth = depth if proposal_capacity is None else proposal_capacity
+        if type(self.active_depth) is not int or not 0 <= self.active_depth <= available <= depth:
+            raise ValueError("proposal capacity must fit the available logits and logical Markov block")
         _geometry(batch, depth + 1)
         fp8 = isinstance(head, RowScaledFP8MarkovWeight)
         values = head.values if fp8 else head
@@ -436,7 +440,7 @@ class PreparedMarkovProposals:
             or values.device != base.device
             or embedding.device != base.device
             or base.stride(1) < vocab
-            or base.stride(0) < depth * base.stride(1)
+            or base.stride(0) < available * base.stride(1)
         ):
             raise ValueError(
                 "fused Markov proposals require strided BF16/FP32 logits and contiguous BF16 or row-scaled E4M3 tables"
@@ -461,9 +465,6 @@ class PreparedMarkovProposals:
         self.tokens, self.probabilities, self.valid = tokens, probabilities, valid
         self.state, self.slots, self.generations, self.live_rows = (requests, slots, generations, live_rows)
         self.seeds, self.offsets = seeds, offsets
-        self.active_depth = depth if proposal_capacity is None else proposal_capacity
-        if type(self.active_depth) is not int or not 0 <= self.active_depth <= depth:
-            raise ValueError("proposal capacity must fit the logical Markov block")
         self.batch, self.depth, self.vocab, self.block = batch, depth, vocab, 256
         self.scratch = bind_scratch(self.scratch_layout(batch, depth, vocab), device=base.device, workspace=workspace)
         self.kernels = None

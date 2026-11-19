@@ -10,7 +10,7 @@ sliding-window Qwen3 layers predict one draft per block position, and a low-rank
 previously sampled token biases each position's logits while drafts are sampled left to right.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 
 import torch
@@ -262,7 +262,9 @@ class PreparedDraft:
     """Project and gather draft logits for sampled proposals."""
 
     def __init__(self, weights, scratch, metadata, pool, *, block, runtime, vocabulary_runtime, embedding_runtime,
-                 coordinator, session, name, workspace):
+                 coordinator, session, name, workspace, gather_rows=None):
+        if gather_rows is not None:
+            scratch = replace(scratch, logits=scratch.logits[:gather_rows])
         self.logit_shape, self.local_logit_shape = tuple(scratch.logits.shape), tuple(scratch.local_logits.shape)
         self.logit_dtype, self.local_logit_dtype = scratch.logits.dtype, scratch.local_logits.dtype
         config, draft = weights.config, weights.draft

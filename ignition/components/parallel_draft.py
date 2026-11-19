@@ -229,8 +229,7 @@ class PreparedParallelDraftRound:
         if fuse_markov:
             from .markov_sampling import PreparedMarkovProposals, PreparedDraftTokenBroadcast
 
-            block = self.draft_inputs.shape[1]
-            base = draft_logits_example.view(b, block, -1)[:, o.logit_offset:o.logit_offset + w - 1]
+            base = draft_logits_example.view(b, -1, draft_logits_example.shape[-1])[:, o.logit_offset:o.logit_offset + w - 1]
             self.full_proposal = PreparedMarkovProposals(base, o.weights.draft.markov_embedding, head,
                 self.markov_token, self.drafts, self.probabilities, self.valid, o.requests,
                 o.inputs.row_slot_ids[:b], o.inputs.row_generations[:b], o.inputs.live_rows,
@@ -431,7 +430,7 @@ class PreparedParallelDraftRound:
             result = self.draft(draft_metadata)
             draft_logits, selector_features = result[:2]
             features = result[2] if len(result) == 3 else None
-            draft_logits = draft_logits.view(b, block, -1)
+            draft_logits = draft_logits.view(b, -1, draft_logits.shape[-1])
             unary = shortlist_ids = None
             if self.shortlisted_selector is not None:
                 unary, shortlist_ids = self.shortlisted_selector.prepare_shortlists(draft_logits, features=selector_features)

@@ -306,8 +306,9 @@ def test_packed_proposal_capacity_matches_full_prefix_under_replay(capacity, voc
     tokens = torch.empty_like(full.tokens)
     probabilities = torch.empty_like(full.probabilities)
     valid = torch.empty_like(full.valid)
+    prefix = full.base[:, :max(1, capacity)]
     bounded = PreparedMarkovProposals(
-        full.base, full.embedding, full.head, full.pending, tokens, probabilities, valid,
+        prefix, full.embedding, full.head, full.pending, tokens, probabilities, valid,
         full.state, full.slots, full.generations, full.live_rows, full.seeds, full.offsets,
         proposal_capacity=capacity,
     )
@@ -317,7 +318,7 @@ def test_packed_proposal_capacity_matches_full_prefix_under_replay(capacity, voc
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
         full()
-        bounded.run(full.base, full.pending, tokens, probabilities, valid, full.seeds, full.offsets)
+        bounded.run(prefix, full.pending, tokens, probabilities, valid, full.seeds, full.offsets)
     for scenario in ("normal", "penalties", "invalid", "grammar", "inactive", "reused"):
         full.base.normal_()
         full.offsets.add_(28)

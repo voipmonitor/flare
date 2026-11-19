@@ -48,7 +48,7 @@ from ignition.preparation.tuning import RecordedPreparationSession, with_autotun
 from ignition.preparation.tuning_replicas import TuningReplica
 from ignition.progress import phase
 
-from .config import ModelConfig, PAGE_TOKENS
+from .config import DSparkConfig, ModelConfig, PAGE_TOKENS
 from ignition.recipes.kimi31.dflash_config import DFlash2Config
 from .contract import prepare as prepare_contract
 from .decoder import DecoderStorage, PreparedDecoder, Scratch
@@ -535,12 +535,18 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                             (*forward_inputs, *(vision_prefill.buffers() if mode == "prefill" and patches else ())),
                             enabled=enabled)
             if speculation is not None:
+                from functools import partial
                 from ignition.components.parallel_draft import PreparedParallelDraftRound
 
                 for batch, width, packed in sorted(config.speculative_round_shapes, key=lambda shape: (shape[2], shape[0]), reverse=True):
                     name = f"speculative{batch}x{width}-tokens{packed}"
+                    forwards = speculation.forwards
+                    if (batch == 1 and 1 < packed < width and getattr(speculation, "block_proposal_broadcast", False)
+                            and isinstance(weights.config.draft, DSparkConfig)):
+                        # Preserve the complete local GEMM. Only this prefix enters the fused sampler.
+                        forwards = replace(forwards, draft=partial(forwards.draft, gather_rows=packed - 1))
                     forward = PreparedParallelDraftRound(speculation, batch, width, name,
-                        target_token_capacity=packed)
+                        target_token_capacity=packed, forwards=forwards)
                     forward.prepare()
                     add(name, forward, "speculative", batch, width, (*inputs.buffers(), "sampling_grammar_mask"), enabled=True, packed_tokens=packed)
 

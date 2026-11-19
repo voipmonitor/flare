@@ -18,6 +18,7 @@ class PreparedVocabularyProjection:
     Local and full-vocabulary outputs are caller-owned. Every rank participates
     in the gather; the recipe chooses which rank samples from the full logits.
     A quantized shard, such as an NVFP4 draft head, runs as a b12x A16 projection.
+    A shorter gathered output takes the leading rows of the complete local projection.
     Unquantized shards honor the output buffer's arithmetic contract; BF16
     checkpoint weights can accumulate and produce logits in FP32.
     Optional row indices expand gathered physical rows into caller-owned sample
@@ -30,8 +31,8 @@ class PreparedVocabularyProjection:
     def __init__(self, source, weight, local_output, output, *, runtime, session,
                  coordinator, name, activation_mode="a16", buffers=None, row_indices=None, workspace=None, gather=True):
         rows = source.shape[0]
-        if row_indices is None and output.shape[0] != rows:
-            raise ValueError("vocabulary output rows must match projected rows without row indices")
+        if row_indices is None and (not 0 < output.shape[0] <= rows or not gather and output.shape[0] != rows):
+            raise ValueError("vocabulary output must cover the projected rows or a gathered prefix")
         if row_indices is not None and (row_indices.dtype != torch.int64
                 or row_indices.device != source.device or row_indices.shape != (output.shape[0],)
                 or output.shape[0] < rows):
@@ -59,10 +60,11 @@ class PreparedVocabularyProjection:
         columns = local_output.shape[1] * world
         if columns < output.shape[1]:
             raise ValueError("vocabulary shards must cover every output token")
-        self.gathered = output[:rows] if columns == output.shape[1] else (
-            torch.empty((rows, columns), dtype=output.dtype, device=output.device) if buffers is None
-            else buffers.zeros((rows, columns), output.dtype))
-        self.gather = PreparedAllGather(local_output, self.gathered, runtime=runtime,
+        self.gather_rows = min(rows, output.shape[0])
+        self.gathered = output[:self.gather_rows] if columns == output.shape[1] else (
+            torch.empty((self.gather_rows, columns), dtype=output.dtype, device=output.device) if buffers is None
+            else buffers.zeros((self.gather_rows, columns), output.dtype))
+        self.gather = PreparedAllGather(local_output[:self.gather_rows], self.gathered, runtime=runtime,
             session=session, coordinator=coordinator, name=f"{name}.gather")
         self.output = output
         self.padded = columns != output.shape[1]
@@ -86,7 +88,7 @@ class PreparedVocabularyProjection:
             projected = self.projection(source)
             if self.local_only:
                 return projected if row_indices is None else projected[row_indices]
-            gathered = self.gather(projected)
+            gathered = self.gather(projected[:self.gather_rows])
             if row_indices is None and not self.padded:
                 return gathered
             shape, stride, dtype = self.output_layout
@@ -98,7 +100,7 @@ class PreparedVocabularyProjection:
             if row_indices is not None:
                 self.output.copy_(projected[row_indices])
             return self.output
-        gathered = self.gather(self.projection(source))
+        gathered = self.gather(self.projection(source)[:self.gather_rows])
         if row_indices is not None:
             # Indexed reads materialize before the overlapping destination write.
             self.output.copy_(gathered[row_indices, :self.output.shape[1]])
