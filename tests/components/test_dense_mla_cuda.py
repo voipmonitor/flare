@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(os.environ.get("FLARE_RUN_CUDA_TESTS") != "1",
 
 @pytest.mark.parametrize("functional", [False, True])
 @pytest.mark.parametrize("tokens,batch", [(5, 2), (9, 4)])
-def test_ragged_tuning_partition_covers_physical_queries(monkeypatch, tokens, batch, functional):
+def test_ragged_tuning_partition_covers_physical_queries(monkeypatch, tmp_path, tokens, batch, functional):
     import ignition.components.dense_mla as module
 
     device = torch.device("cuda", 0)
@@ -29,6 +29,7 @@ def test_ragged_tuning_partition_covers_physical_queries(monkeypatch, tokens, ba
     query = torch.randn((tokens, heads, 576), dtype=torch.bfloat16, device=device) * .1
     cache = torch.full((batch, page, 576), .125, dtype=torch.float8_e4m3fn, device=device)
     output = torch.empty((tokens, heads, 512), dtype=torch.bfloat16, device=device)
+    lse = torch.empty((tokens, heads), dtype=torch.float32, device=device)
     table = torch.arange(batch, dtype=torch.int32, device=device).view(batch, 1)
     lengths = torch.full((batch,), 64, dtype=torch.int32, device=device)
     starts = torch.arange(batch + 1, dtype=torch.int32, device=device) * tokens // batch
@@ -52,33 +53,42 @@ def test_ragged_tuning_partition_covers_physical_queries(monkeypatch, tokens, ba
         num_cache_pages=batch, use_cuda_graph=True)
     with RecordedPreparationSession(device=device, checkpoint="dense-mla-ragged",
             workload_schema="dense-mla-ragged", numerical_policy="default") as session:
+        session.cache_dir = tmp_path / "selection"
         arena = ScratchArena(device)
         session.register_scratch(arena)
         attention = PreparedDenseMLA(query, cache, output, table, lengths, starts,
-            caps=caps, scale=576 ** -.5, session=session, name="attention", workspace=arena)
+            caps=caps, scale=576 ** -.5, session=session, name="attention", workspace=arena, lse=lse)
         if functional:
             attention.functional(session=session)
         session.tune()
         if functional:
             arena.release_preparation()
-            operation = attention
-            attention = compile_forward(lambda: output.copy_(operation(query, table, lengths, starts)))
+            def forward():
+                values, normalizers = attention(query, page_table=table, lengths=lengths, starts=starts)
+                output.copy_(values)
+                lse.copy_(normalizers)
+            run = compile_forward(forward)
+        else:
+            def run():
+                attention(query, output)
         assert observed
         cache.fill_(.125)
-        attention(query, output)
+        run()
         graph = torch.cuda.CUDAGraph()
         with session.capture(), torch.cuda.graph(graph):
-            attention(query, output)
+            run()
         session.freeze()
         for reverse in (False, True):
             counts = starts.diff().flip(0) if reverse else starts.diff()
             starts[1:].copy_(counts.cumsum(0))
             output.fill_(float("nan"))
+            lse.fill_(float("nan"))
             allocated = torch.cuda.memory_stats()["allocation.all.allocated"]
             graph.replay()
             torch.cuda.synchronize()
             assert torch.cuda.memory_stats()["allocation.all.allocated"] == allocated
             torch.testing.assert_close(output, torch.full_like(output, .125), atol=.002, rtol=.02)
+            assert torch.isfinite(lse).all()
         graph.reset()
 
 
