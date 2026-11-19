@@ -464,6 +464,7 @@ def test_peer_export_keeps_the_remote_owner_for_cleanup(tmp_path, monkeypatch, f
     import torch.distributed as dist
     from ignition.preparation import host_ranks, runtime_core
     from ignition.preparation.core_file import read_sources
+    from ignition.preparation.core_snapshot import ExportOptions
 
     events = []
     control_root, control_peer = socket.socketpair()
@@ -526,7 +527,8 @@ def test_peer_export_keeps_the_remote_owner_for_cleanup(tmp_path, monkeypatch, f
                   "store": ("127.0.0.1", 1234), "exporting": False}
     source = tmp_path / "weights.bin"
     source.write_bytes(b"synthetic weights")
-    commands = iter((("checkpoint-source", None), assignment, ("export", {}), "close"))
+    commands = iter((("checkpoint-source", None), assignment,
+                     ("export", {}, ExportOptions(tmp_path)), "close"))
     def export(*args, **kwargs):
         from ignition.preparation.core_file import write_sources
         from ignition.preparation.runtime_core_pb2 import ModelIndex, BundleIndex, Span

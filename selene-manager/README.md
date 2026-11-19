@@ -102,8 +102,11 @@ and instances after fixing the host configuration.
 Create `/run/selene` and the root directory with ownership matching the runtime uid/gid. The
 manager and every instance must share `/dev/shm/selene`: run them with `--ipc=host` as above, or
 bind-mount the same directory at `/dev/shm/selene` in each container. Share the socket directory
-and a PID namespace with the instances so the peer pid matches `SO_PEERCRED`. No GPU flags, CUDA
-libraries or privileges are required, and the image has no CUDA dependency.
+with the instances. On Linux 6.5+, `SO_PEERPIDFD` lets the manager watch client exit
+across PID namespaces, so `--pid=host` is optional. On older kernels, share a PID
+namespace for shared memory, or configure `--listen` and connect over TCP;
+without either, instance startup fails. No GPU flags, CUDA libraries or privileges
+are required, and the image has no CUDA dependency.
 
 The disk threads use io_uring, which Docker's default seccomp profile blocks. Run the container
 with `deploy/seccomp-io-uring.json`: Docker's default profile with `io_uring_setup`,
