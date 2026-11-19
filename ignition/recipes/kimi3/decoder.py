@@ -75,6 +75,7 @@ def _fake_join_shared_expert(source, routed, outputs, workspace, auxiliary_strea
 class DecoderStorage:
     hidden_columns: torch.Tensor
     latent_begin: torch.Tensor
+    row_tuning: object = None
 
     @classmethod
     def allocate(cls, config, shard, device):
@@ -183,6 +184,10 @@ class PreparedLatentMoE:
         self.expert_reduce = PreparedChunkedAllReduce(expert_output, buffer("latent_sum", latent),
             runtime=runtime, coordinator=coordinator, session=session,
             name=name + ".expert_reduce").functional(session=session)
+        self.row_norm = None
+        if tokens == 4 and latent == 3584 and storage.row_tuning is not None:
+            from .row_reductions import RowGeometry
+            self.row_norm = storage.row_tuning.register(self.expert_reduce, RowGeometry(latent))
         local_logits = buffer("local_router", weights["router"].shape[0], torch.float32)
         self.router_projection = UnquantizedProjection(source, weights["router"], local_logits,
             session=session, name=name + ".router").functional(session=session)
@@ -254,9 +259,13 @@ class PreparedLatentMoE:
                 latent = self.down_reduce(self.down(source.index_select(1, self.hidden_columns)))
             routes = self.router(logits)
             ids, route_weights = routes.ids, routes.weights
-        latent_sum = self.expert_reduce(self.experts(latent, ids, route_weights))
-        up_input = torch.empty((source.shape[0], self.latent_width // self.world), dtype=source.dtype, device=source.device)
-        rms_norm_columns(latent_sum, self.latent_norm, up_input, self.eps, begin=self.latent_begin)
+        partial = self.experts(latent, ids, route_weights)
+        if self.row_norm is None:
+            latent_sum = self.expert_reduce(partial)
+            up_input = torch.empty((source.shape[0], self.latent_width // self.world), dtype=source.dtype, device=source.device)
+            rms_norm_columns(latent_sum, self.latent_norm, up_input, self.eps, begin=self.latent_begin)
+        else:
+            up_input = self.row_norm.norm(partial, self.latent_norm, self.latent_begin, self.eps)
         output = self.up(up_input)
         shared = self.shared.finish(pending_shared, output) if self.shared.concurrent else self.shared(source)
         return output + shared
@@ -325,6 +334,11 @@ class PreparedDecoder:
             reduce = PreparedChunkedAllReduce(source, total, runtime=runtime, coordinator=coordinator,
                 session=session, name=prefix + ".reduce").functional(session=session)
             self.layers.append((w, attention, mlp, reduce))
+        self.row_mixes = None
+        if tokens == 4 and hidden == 7168 and buffers.row_tuning is not None:
+            from .row_reductions import hidden_row_choices
+            self.row_mixes = hidden_row_choices(buffers.row_tuning, self.layers, config.text["attn_res_block_size"],
+                self.auxiliary_layers if self.auxiliary_stream == "attn_res" else (), self.residual_blocks)
         self.scoring = None if scoring is None else scoring.prepare(source, weights.head,
             vocabulary=config.text["vocab_size"], session=session, coordinator=coordinator, name=name + ".prompt")
         self.head = PreparedVocabularyProjection(scratch.hidden, weights.head, scratch.local_logits, scratch.logits,
@@ -379,6 +393,7 @@ class PreparedDecoder:
             self.vision_state.inject(m, local)
         size, eps = c["attn_res_block_size"], c["rms_norm_eps"]
         delta, mode = self.embedding.gather(local), REPLACE
+        preceding = None
         prefix = torch.zeros_like(delta)
         blocks = torch.zeros((self.tokens, self.residual_blocks, self.hidden), dtype=delta.dtype, device=delta.device)
         residual = ResidualStream(prefix, blocks, torch.empty_like(delta))
@@ -392,7 +407,8 @@ class PreparedDecoder:
                 captured = auxiliary[:, column:column + self.hidden]
             hidden = residual.mix(delta, mode, sources=committed, write=index // size if boundary else -1,
                 score=w["attention_res_score"], norm=w["input_layernorm"], eps=eps, output_eps=eps,
-                mixture=captured if self.auxiliary_stream == "attn_res" else None, output=torch.empty_like(delta))
+                mixture=captured if self.auxiliary_stream == "attn_res" else None, output=torch.empty_like(delta),
+                reduction_choice=preceding)
             if captured is not None and self.auxiliary_stream == "prefix":
                 captured.copy_(residual.prefix)
             if self.weights.config.layers[index] == "kda":
@@ -401,14 +417,18 @@ class PreparedDecoder:
                 attended = attention(hidden, m, shared_index=shared_index)
             else:
                 attended = attention(hidden, m)
-            attended = reduce(attended)
+            after_attention, preceding = (None, None) if self.row_mixes is None else self.row_mixes[index]
+            if after_attention is None:
+                attended = reduce(attended)
             hidden = residual.mix(attended, REPLACE if boundary else ADD, sources=committed + boundary, write=-1,
                 score=w["mlp_res_score"], norm=w["post_attention_layernorm"], eps=eps, output_eps=eps,
-                output=torch.empty_like(delta))
-            delta, mode = reduce(mlp(hidden)), ADD
+                output=torch.empty_like(delta), reduction_choice=after_attention)
+            delta, mode = mlp(hidden), ADD
+            if preceding is None:
+                delta = reduce(delta)
         hidden = residual.mix(delta, mode, sources=-(-len(self.layers) // size), write=-1,
             score=self.weights.output_res_score, norm=self.weights.norm, eps=eps, output_eps=eps,
-            output=torch.empty_like(delta))
+            output=torch.empty_like(delta), reduction_choice=preceding)
         if self.scoring is not None:
             self.scoring(hidden)
         sampled = hidden[m.sample_indices]

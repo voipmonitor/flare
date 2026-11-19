@@ -82,7 +82,7 @@ class ResidualStream:
             raise ValueError("residual stream tensors must be BF16 with contiguous rows")
         self.prefix, self.blocks, self.output = prefix, blocks, output
 
-    def mix(self, delta, mode, *, sources, write, score, norm, eps, output_eps, mixture=None, output=None):
+    def mix(self, delta, mode, *, sources, write, score, norm, eps, output_eps, mixture=None, output=None, reduction_choice=None):
         """Apply ``mode`` with ``delta``, commit block ``write`` (or none for -1), and normalize the mixture
         of the first ``sources`` committed blocks and the running sum into ``output`` (by default the stream's);
         ``mixture`` also receives it unnormalized."""
@@ -95,6 +95,11 @@ class ResidualStream:
         output = self.output if output is None else output
         if output.shape != self.prefix.shape or output.stride(-1) != 1 or output.dtype != torch.bfloat16:
             raise ValueError("residual output must be BF16 rows matching the running sum")
+        if reduction_choice is not None:
+            if reduction_choice.fused:
+                return reduction_choice.fused_mix(self, delta, score=score, norm=norm, eps=eps, output_eps=output_eps,
+                                                  mixture=mixture, output=output)
+            delta = reduction_choice.sum(delta)
         rows, hidden = self.prefix.shape
         delta = self.prefix if delta is None else delta
         tile, warps = TILES[min(sources, len(TILES) - 1)]
