@@ -26,7 +26,7 @@ class _AttentionStage(NamedTuple):
     gathered: torch.Tensor | None
     partial: torch.Tensor | None
     lse: torch.Tensor | None
-    selected: torch.Tensor
+    selected: torch.Tensor | None
     selected_scores: torch.Tensor | None
     owners: torch.Tensor
     slots: torch.Tensor
@@ -97,6 +97,16 @@ class PreparedDSA(PreparedMLAProjection):
             counts = storage.buffer("counts", (rows,), torch.int32)
             starts, pages = constants.starts[:rows + 1], constants.pages[:rows]
             part = dict(selector=selector, owners=owners, slots=slots, counts=counts, starts=starts, pages=pages)
+            tuning = getattr(context, "selection_tuning", None)
+            if (mode == "verify" and rows == 4 and self.shards.world == 16 and metadata.starts.numel() == 1
+                    and tuning is not None and "owner" in selector.merge.alternatives and tuning.supports_local_slots):
+                from .local_slots import PreparedLocalSlots
+
+                choice = PreparedLocalSlots(selector.local, selector.scores, metadata.positions[start:end],
+                    metadata.token_page_table[start:end], owners, slots, counts, cache_pages=cache.shape[0],
+                    context=context, session=session, name=name + ".local_slots")
+                tuning.register_slots(choice, selector.merge)
+                part["local_slots"] = choice
             if mode == "prefill":
                 if peers is None or peers.shape != (self.shards.world,):
                     raise ValueError("Kimi sparse prefill requires every rank's latent-cache address")
@@ -176,9 +186,10 @@ class PreparedDSA(PreparedMLAProjection):
                 part["gather"].peers = None
 
     def __call__(self, source, metadata=None, *, shared_index=None):
-        return self._run(source, metadata, shared_index=shared_index).output
+        return self._run(source, metadata, shared_index=shared_index, observe_selection=False).output
 
-    def _run(self, source, metadata, *, shared_index=None):
+    def _run(self, source, metadata, *, shared_index=None, observe_selection=True):
+        """Keep the full selected-ID list when a caller observes the sparse-attention stages."""
         if metadata is None:
             raise ValueError("sparse MLA execution requires invocation metadata")
         projected = self.project(source, metadata)
@@ -208,7 +219,13 @@ class PreparedDSA(PreparedMLAProjection):
             gathered = partial = lse = index = selected_scores = None
             if self.mode == "prefill":
                 quantized = None
-            if selected_all is not None:
+            direct = part.get("local_slots")
+            if direct is not None and direct.enabled and not observe_selection:
+                ids, scores, *_ = part["selector"].score_local(query[start:end], weights[start:end],
+                    positions, tables, shared_index=shared_index)
+                owners, slots, counts = direct(ids, scores, positions, tables, dependencies=(self.cache,))
+                selected = None
+            elif selected_all is not None:
                 selected = selected_all[start:end]
             else:
                 selector = part["selector"]
@@ -221,12 +238,13 @@ class PreparedDSA(PreparedMLAProjection):
                     gathered = self.query_overlap.finish(pending, packed)
                 selected, selected_scores = selector.exchange_result(packed, positions,
                     dependencies=() if gathered is None else (gathered,))
-            owners = torch.empty((rows, TOPK), dtype=torch.int32, device=source.device)
-            slots = torch.empty_like(owners)
-            counts = torch.empty((rows,), dtype=torch.int32, device=source.device)
-            selection_slots(selected, positions, tables, owners, slots, counts, self.shards,
-                self.cache.shape[0], local=self.mode != "prefill", global_records=history is not None,
-                logical_ids=self.reuse_records)
+            if selected is not None:
+                owners = torch.empty((rows, TOPK), dtype=torch.int32, device=source.device)
+                slots = torch.empty_like(owners)
+                counts = torch.empty((rows,), dtype=torch.int32, device=source.device)
+                selection_slots(selected, positions, tables, owners, slots, counts, self.shards,
+                    self.cache.shape[0], local=self.mode != "prefill", global_records=history is not None,
+                    logical_ids=self.reuse_records)
             if self.mode == "prefill":
                 if self.reuse_records:
                     records = part["stage"](metadata.page_table[0], visible_end, owners, slots, counts,

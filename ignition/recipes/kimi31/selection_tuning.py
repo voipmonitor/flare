@@ -2,7 +2,7 @@
 
 """Choose complete sparse-candidate compositions during model preparation."""
 
-from functools import partial
+from functools import cached_property, partial
 
 import torch
 from b12x.preparation import PreparedCall
@@ -98,9 +98,19 @@ class CandidateSelectionTuning:
         self.context, self.reduction = context, reduction
         self.cache_root = cache_root
         self.selections = {}
+        self.slot_groups = {}
 
     def register(self, selection):
         self.selections.setdefault(selection.rows, []).append(selection)
+
+    def register_slots(self, choice, merge):
+        self.slot_groups.setdefault(choice.geometry, []).append((choice, merge))
+
+    @cached_property
+    def supports_local_slots(self):
+        from .local_slots import supports_local_slots
+
+        return supports_local_slots(self.context)
 
     def tune(self, session):
         if not self.selections:
@@ -177,4 +187,8 @@ class CandidateSelectionTuning:
                     forward.retire_after_capture()
                 graphs.clear()
                 compiled.clear()
+        if self.slot_groups:
+            from .slot_tuning import tune_local_slots
+
+            report.extend(tune_local_slots(self, session))
         return report

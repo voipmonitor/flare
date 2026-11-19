@@ -118,6 +118,10 @@ class PreparedIndexSelection:
         return self.prepare_local_result(query, weights, positions, tables, shared_index=shared_index)[0]
 
     def prepare_local_result(self, query, weights, positions, tables, *, shared_index=None):
+        result = self.score_local(query, weights, positions, tables, shared_index=shared_index)
+        return (self.merge.pack(indices=result[0], scores=result[1]), *result)
+
+    def score_local(self, query, weights, positions, tables, *, shared_index=None):
         if shared_index is None:
             pages = torch.empty((1 if self.mode == "prefill" else self.rows, self.width * 2),
                                 dtype=torch.int32, device=query.device)
@@ -131,8 +135,7 @@ class PreparedIndexSelection:
         (indices, scores), quantized, scales, scaled_weights = self.indexer._run_observed(
             query.view(query.shape[0], 32, 128), weights,
             pages.expand(self.rows, -1) if self.mode == "prefill" else pages, lengths)
-        packed = self.merge.pack(indices=indices, scores=scores)
-        return packed, indices, scores, quantized, scales, scaled_weights
+        return indices, scores, quantized, scales, scaled_weights
 
     def exchange(self, packed, positions, *, dependencies=()):
         return self.exchange_result(packed, positions, dependencies=dependencies)[0]
