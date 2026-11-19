@@ -263,13 +263,14 @@ pub fn serve(config: Config, stop: Arc<AtomicBool>) -> Result<()> {
     let (channel, channel_events) = match config.data_address()? {
         Some(address) => {
             let listener = std::net::TcpListener::bind(address)?;
+            let rdma = rdma_device(&config, &regions, listener.local_addr()?.ip())?;
             let (hub, events) = crate::data::channel::Hub::start(
                 runtime.handle(),
                 listener,
                 regions.clone(),
                 tls.clone(),
                 flare_selene::shared::MAX_WINDOW_PAGES,
-                rdma_device(&config, &regions)?,
+                rdma,
             )?;
             (Some(hub), Some(events))
         }
@@ -518,11 +519,12 @@ pub fn serve(config: Config, stop: Arc<AtomicBool>) -> Result<()> {
 fn rdma_device(
     config: &crate::config::Config,
     regions: &Arc<crate::regions::LocalRegions>,
+    local_address: std::net::IpAddr,
 ) -> Result<Option<Arc<dyn crate::data::channel::Rdma>>> {
     if !config.rdma_enabled() {
         return Ok(None);
     }
-    let device = crate::data::ibv::Device::open(regions.clone())
+    let device = crate::data::ibv::Device::open(regions.clone(), local_address)
         .map_err(|error| invalid(format!("--rdma: {error}")))?;
     Ok(Some(Arc::new(device)))
 }
@@ -531,6 +533,7 @@ fn rdma_device(
 fn rdma_device(
     _: &crate::config::Config,
     _: &Arc<crate::regions::LocalRegions>,
+    _: std::net::IpAddr,
 ) -> Result<Option<Arc<dyn crate::data::channel::Rdma>>> {
     Ok(None)
 }

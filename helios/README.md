@@ -179,13 +179,19 @@ statically. It performs no `pkg-config` discovery and uses no system
 `libturbojpeg` at build time or run time. Without NASM on `PATH`, libjpeg-turbo
 builds without SIMD extensions.
 
-Image admission accepts base64 `image/png`, `image/jpeg`, and `image/webp` data
-URLs. JPEG uses
+Image admission accepts base64 `image/png`, `image/jpeg`, `image/webp`, and
+`image/gif` data URLs. JPEG uses
 accurate IDCT, smooth chroma upsampling, and at most 100 progressive scans.
 Baseline/progressive Huffman JPEG is supported; lossless and arithmetic JPEG
 are rejected. Encoded byte and decoded pixel limits apply before pixel allocation.
+16-bit PNG samples follow Pillow's RGB conversion: RGB, RGBA, and grayscale-alpha
+keep the high byte, and grayscale clamps to 8 bits. Animated PNG is rejected.
+A GIF with a readable second image is rejected as animated. A single-frame GIF decodes as Pillow's
+RGB and RGBA conversions do, on a canvas that covers the logical screen and the
+frame. MoonViT and padded-grid preparation keep the transparent index as alpha.
 PNG and JPEG EXIF orientation is applied before resize; orientations 1–8 include
 mirrored and axis-swapped images. Invalid orientation metadata is rejected.
+GIF carries no EXIF orientation.
 RGB conversion discards alpha and does not apply embedded color profiles.
 Pillow is used only to generate test fixtures, never by native image admission.
 
@@ -653,7 +659,7 @@ the prepared graph contract maps them to backing storage and padding sentinels.
 ## Native image preparation
 
 The `images` feature adds `frontend::images::ImageProcessor` and PNG, JPEG,
-and static WebP decoding; it also enables `frontend`. Typed core metadata
+static WebP, and non-animated GIF decoding; it also enables `frontend`. Typed core metadata
 selects the preparation profile and token layout independently. Profiles cover
 Qwen, MiMo, patch-merge, DeepSeek, DeepSeek row-major, Moonvit, Step, RADIO,
 and GLM inputs.

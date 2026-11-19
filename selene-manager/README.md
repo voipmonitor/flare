@@ -66,7 +66,7 @@ Size options accept bytes with binary K/M/G/T suffixes.
 | `--listen` | none; serve instances on other hosts at ADDR:PORT |
 | `--listen-data` | the host of `--listen`, next port; where those instances copy bytes |
 | `--tls-cert`, `--tls-key` | none; TLS for `--listen` |
-| `--rdma` | off; experimental, needs the `rdma` feature and `--listen`, not with TLS |
+| `--rdma` | off; experimental, needs the `rdma` feature and `--listen`, a data address on a RoCE interface, not with TLS |
 | `--max-age` | `off`; expires the manager's records a `DURATION` after last use (see [operating](docs/operating.md#deployment-model)) |
 | `--metrics` | disabled; when set, HTTP `GET /metrics` |
 
@@ -85,7 +85,7 @@ least `--memory + --staging`. Budgets cover record and window extents, not total
 ```sh
 docker build -f selene-manager/Dockerfile -t selene .   # from the Flare repository root
 docker run --rm --name selene \
-  --user "$(id -u):$(id -g)" --pid=host --network=host --ipc=host \
+  --user "$(id -u):$(id -g)" --network=host --ipc=host \
   --security-opt seccomp=selene-manager/deploy/seccomp-io-uring.json \
   -v /run/selene:/run/selene \
   -v /var/lib/selene:/var/lib/selene \

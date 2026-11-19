@@ -522,7 +522,7 @@ Images replay one at a time into bounded windows in the request's feature buffer
 Chunked prefill consumes each window before the buffer is reused. Combined image
 tokens may exceed the buffer's capacity; each image must fit one window and a
 captured patch capacity. HTTP body and total context limits also apply.
-PNG, JPEG, and static WebP data URLs are accepted.
+PNG, JPEG, static WebP, and non-animated GIF data URLs are accepted.
 
 For Qwen, each feature slot holds 16,384 BF16 vectors of width 2,560: 80 MiB per
 rank. Four image slots therefore reserve 320 MiB even with 32 active request slots.

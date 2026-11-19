@@ -1197,7 +1197,9 @@ With the `rdma` cargo feature and a manager started with `--rdma`, which the
 manager refuses to combine with TLS, unsliced
 claims can use RDMA WRITEs into private slots lent by the instance. Puts and rank
 legs use TCP. An instance without a device, or after one failed RDMA transfer,
-uses the stream.
+uses the stream. Each end uses the device whose RoCE v2 GID is the local address of
+the data connection, so that connection must run on the RoCE interface (host
+networking for containers), and the manager's data listener must name that address.
 
 Copy priority is fixed: neighbour GPU, host DRAM, host NVMe, then remote NVMe.
 There are no synthetic startup transfers or borrowed GPU scratch ids.

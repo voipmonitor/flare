@@ -540,7 +540,7 @@ assistant message.
 
 Strict function schemas (`strict: true`) are rejected. Hosted search,
 computer execution, file stores, audio, and remote image downloads are unsupported. Images must be
-base64 PNG, JPEG, or static WebP data. Images are encoded sequentially into
+base64 PNG, JPEG, static WebP, or non-animated GIF data. Images are encoded sequentially into
 bounded feature windows. Chunked prefill consumes each window before its storage
 is reused; the total image tokens across a conversation may exceed
 `image_feature_window_tokens`. Image count is bounded only by
