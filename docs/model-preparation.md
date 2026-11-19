@@ -279,6 +279,13 @@ CPU workers, independently of the number of tuning GPUs.
 preparation, whose ranks divide tuning candidates as described above. An explicit
 `--compile-workers` budget applies separately on each host.
 
+Four-row Kimi K3.1 verification on a sixteen-rank decode context group can
+select KV records directly on their owning ranks. When FlashInfer provides an
+eligible PCIe channel, preparation times this path against the measured global-ID
+selection and its physical page mapping. Both use the same rank-major ordering of
+FP32 score words and the same causal and page-table checks. Diagnostic calls that
+request the global IDs continue to materialize them.
+
 ## Exporting runtime cores
 
 Export publishes a directory entry in the shared model cache and prints its
