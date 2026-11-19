@@ -448,7 +448,9 @@ controllers must speak the same agent protocol version (`PROTOCOL_VERSION` in
 before files are sent.
 Resource classification follows actual consumers in the signed index. Missing,
 overlapping, unclassified, or incorrectly classified spans fail loading. The
-128 MiB metadata limit applies to the complete signed envelope. The core
+128 MiB metadata limit applies to the complete signed envelope and to each reconstructed rank body.
+The verifier accepts up to 1 GiB of reconstructed metadata across the selected ranks and checks
+the aggregate before decoding compressed weight catalogs. The core
 contains the signing-key fingerprint, not the verification key. Keys come from
 Helios's embedded publisher profiles or explicitly supplied profile files.
 
