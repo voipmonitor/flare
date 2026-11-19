@@ -1,5 +1,7 @@
 # Rebuild the signed Kimi K3.1 DSpark checkpoint
 
+For the four-switch TP16 checkpoint tagged `kimi-k31-dspark-tp16-prefill32k-v2`, use the [four-switch build recipe](four_switch/README.md). The commands below reproduce the signed 32K prefill input.
+
 From the repository root, run the following on a Linux x86-64 build host. Pass a complete local Hugging Face snapshot that contains the model primary, its weight and execution companions, and the two input primaries under `rebuild/`. The two output directories must be new. Keep the build and output on the same filesystem. Using the model filesystem for all three paths allows the publisher to hardlink the 1.4 TB of inherited payloads.
 
 ```bash

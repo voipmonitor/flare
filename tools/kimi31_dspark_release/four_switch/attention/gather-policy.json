@@ -1,0 +1,22 @@
+{
+  "17/4": {
+    "function": "gather_whole_rows",
+    "blocks": 1,
+    "threads": 512
+  },
+  "17/7": {
+    "function": "gather_whole_rows",
+    "blocks": 1,
+    "threads": 1024
+  },
+  "17/8": {
+    "function": "gather_whole_rows",
+    "blocks": 1,
+    "threads": 1024
+  },
+  "216/8": {
+    "function": "gather_packet_stripes",
+    "blocks": 4,
+    "threads": 512
+  }
+}

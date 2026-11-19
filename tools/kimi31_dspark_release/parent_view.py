@@ -17,6 +17,8 @@ def main():
     parser.add_argument("primary", type=Path)
     parser.add_argument("primary_sha256")
     parser.add_argument("out", type=Path)
+    parser.add_argument("--companion-overrides", type=Path,
+                        help="directory containing original companions replaced at the same paths in the serving snapshot")
     args = parser.parse_args()
     with args.primary.open("rb") as stream:
         if hashlib.file_digest(stream, "sha256").hexdigest() != args.primary_sha256:
@@ -28,7 +30,14 @@ def main():
         relative = Path(name)
         if relative.is_absolute() or ".." in relative.parts or relative.as_posix() != name:
             raise ValueError(f"invalid signed companion path {name!r}")
-        src = args.primary if name == "model.safetensors" else args.snapshot / relative
+        if name == "model.safetensors":
+            src = args.primary
+        else:
+            src = args.snapshot / relative
+            if args.companion_overrides is not None:
+                original = args.companion_overrides / relative
+                if original.is_file():
+                    src = original
         dst = args.out / relative
         dst.parent.mkdir(parents=True, exist_ok=True)
         src = src.resolve(strict=True)
