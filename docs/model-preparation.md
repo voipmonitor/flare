@@ -1134,6 +1134,13 @@ records written by the current chunk. Projection shapes, normalization and
 weight formats are unchanged. Smaller captured prefill capacities read from the owning GPUs and also require
 peer KV mappings at startup.
 
+During preparation, eligible single-request sparse prefill slices also benchmark
+publishing FP32 scores and int32 token IDs into one array per context rank.
+Each owner reads complete rows, folds candidates in rank order, and returns
+the selected IDs through the existing gather channel. A 128-query slice uses
+2 MiB of peer-visible candidate storage per rank. The prepared graph uses the
+measured winner between that exchange and gathering all candidates on every rank.
+
 At a 1,048,576-token context limit, latent history contains 576 MiB per rank
 and index history contains 132 MiB. These histories are invocation-local tensors.
 Index scoring and selected-ID exchange finish before latent history is produced,

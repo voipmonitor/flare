@@ -37,7 +37,7 @@ def _candidate_pattern(rows, world, topk, rank, seed, count, *, partial_rows=Fal
 
 
 class _Fixture:
-    def __init__(self, rows, context, reduction, session):
+    def __init__(self, rows, context, reduction, session, alternatives=("replicated", "owner")):
         self.rows, self.context, self.step = rows, context, 0
         device, world = context.shards.index.device, context.shards.world
         self.values = {}
@@ -51,7 +51,9 @@ class _Fixture:
             context.shards.index, self.output, world=world, gather_runtime=context.candidates,
             owner_runtime=context.candidate_owners, reduction_runtime=reduction,
             session=session, coordinator=context.coordinator, name=f"selection_trial.rows{rows}",
-            buffers=SharedBuffers(self.values, device, prefix="merge."), local_counts=self.counts)
+            buffers=SharedBuffers(self.values, device, prefix="merge."), local_counts=self.counts, alternatives=alternatives,
+            published=getattr(context, "published_candidates", None),
+            published_buffers=SharedBuffers(self.values, device, prefix="published."))
         self.forwards = {kind: CandidateSelectionForward(self.selection, kind)
                          for kind in self.selection.alternatives}
         self.patterns = tuple(tuple(value.to(device) for value in _candidate_pattern(
@@ -85,7 +87,7 @@ class _Fixture:
 
 
 class CandidateSelectionTuning:
-    """Bind measured compositions for C1 decode and verification capacities.
+    """Bind measured compositions for sparse prefill, decode and verification rows.
 
     Child plans prepare with the model. Private trials use separate plans and
     tensors, then compare those selected plans with each model binding. Trial
@@ -114,7 +116,7 @@ class CandidateSelectionTuning:
                 compile_workers=session.requested_compile_workers,
                 autotune_effort=session.autotune_effort, collective_tuning="static",
                 headroom_bytes=session.headroom_bytes, lock_gpu_clocks=session.lock_gpu_clocks) as trials:
-            fixtures = {rows: _Fixture(rows, self.context, self.reduction, trials)
+            fixtures = {rows: _Fixture(rows, self.context, self.reduction, trials, self.selections[rows][0].alternatives)
                         for rows in sorted(self.selections)}
             trials.tune(show_progress=False)
             for rows, fixture in fixtures.items():

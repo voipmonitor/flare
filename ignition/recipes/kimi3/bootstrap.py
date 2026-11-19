@@ -372,19 +372,24 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
 
             extra = {"groups": dcp_groups}
             if weights.config.dsa is not None:
-                from ignition.recipes.kimi31.dcp import AttentionConstants, ContextParallel
+                from ignition.recipes.kimi31.dcp import AttentionConstants, ContextParallel, PREFILL_ROWS
 
                 extra["attention_constants"] = AttentionConstants.allocate(device, query_capacity=config.decode_tokens)
                 extra["candidates"] = create_head_exchange(dcp_group, device,
-                    max_rows=max(min(config.prefill_chunk_size, 128), config.decode_tokens),
+                    max_rows=max(min(config.prefill_chunk_size, PREFILL_ROWS), config.decode_tokens),
                     heads=config.context_parallel_size, head_dim=8192, ipc=dcp_ipc)
                 if (drafting and config.compile_decoder and config.autotune_effort != "off"
                         and config.collective_tuning == "static"):
                     from b12x.comm.pcie.pcie_dcp_topk import PCIeDCPTopKOwnerExchange
 
+                    from ignition.components.published_candidates import PublishedCandidateStorage
+
                     extra["candidate_owners"] = PCIeDCPTopKOwnerExchange.from_exchange_group(
                         exchange_group=dcp_group, device=device, max_rows=config.draft_tokens + 1,
                         topk=2048, stream_affine=False, ipc=dcp_ipc)
+                    if config.prefill_chunk_size >= 2 * config.context_parallel_size:
+                        extra["published_candidates"] = PublishedCandidateStorage(dcp_group, device,
+                            min(config.prefill_chunk_size, PREFILL_ROWS), 2048, ipc=dcp_ipc)
             # Each DCP group gathers the TP16 head partition owned by that group and combines its partial outputs.
             heads = weights.config.text["num_attention_heads"]
             context = ContextParallel(ContextShards.on(dcp_rank, config.context_parallel_size, device),
@@ -695,12 +700,16 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
         close_resources=(() if scoring is None else (scoring,)) +
                         (() if context is None or getattr(context, "candidate_owners", None) is None
                          else (context.candidate_owners,)) +
+                        (() if context is None or getattr(context, "published_candidates", None) is None
+                         else (context.published_candidates,)) +
                         (() if context is None or getattr(context, "staging", None) is None
                          else (context.staging, context.index_staging)),
         export_zero_ranges=(*(() if scoring is None else scoring.zero_ranges()),
                            *storage_ranges([
                                *(() if context is None or getattr(context, "staging", None) is None
                                  else (context.staging.tensor, context.index_staging.tensor)),
+                               *(() if context is None or getattr(context, "published_candidates", None) is None
+                                 else (context.published_candidates.pages.tensor,)),
                                *(() if not patches else (vision_state.arena,))]), *completion.zero_ranges()),
         resources=(scoring, weights, pool, requests, inputs, admission, commands, forwards, context,
                    compiled, stream, graph_pool, session, coordinator, collective,

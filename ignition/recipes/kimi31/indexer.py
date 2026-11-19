@@ -10,6 +10,7 @@ import torch
 from ignition.components.candidate_selection import PreparedCandidateSelection
 from ignition.components.fp8_indexer import PreparedFP8Indexer, write_fp8_index_keys
 from ignition.components.linear import UnquantizedProjection
+from ignition.components.row_ownership import PreparedGatheredRows
 from ignition.preparation.tuning import register_finalizer
 from ignition.preparation.scratch import buffer_rows
 
@@ -83,16 +84,25 @@ class PreparedIndexSelection:
         if shards.world > 1 and runtime is None:
             raise ValueError("Kimi sparse selection requires a candidate exchange for every context rank")
         tuning = None if context is None else getattr(context, "selection_tuning", None)
-        tune = tuning is not None and mode != "prefill" and metadata.starts.numel() == 1
+        owner_rows = -(-rows // shards.world)
+        published = None if context is None else getattr(context, "published_candidates", None)
+        tune = tuning is not None and metadata.starts.numel() == 1
+        if tune and published is not None and PreparedGatheredRows.fits(self.selected[:owner_rows], runtime):
+            alternatives = ("replicated", "published")
+        elif tune and mode != "prefill":
+            alternatives = ("replicated", "owner")
+        else:
+            alternatives = ("replicated",)
         self.merge = PreparedCandidateSelection(self.local, self.scores, metadata.positions[start:end],
             shards.index, self.selected, world=shards.world, gather_runtime=runtime,
             owner_runtime=context.candidate_owners if tune else None,
             reduction_runtime=tuning.reduction if tune else None, session=session,
             coordinator=None if context is None else context.coordinator, name=name + ".merge",
             buffers=SharedBuffers(buffers, query.device, prefix="merge."),
-            dependencies=(latent_cache,), alternatives=("replicated", "owner") if tune else ("replicated",),
-            local_counts=self.candidate_counts if tune else None)
-        if tune:
+            dependencies=(latent_cache,), alternatives=alternatives,
+            local_counts=self.candidate_counts if "owner" in alternatives else None,
+            published=published, published_buffers=SharedBuffers(buffers, query.device, prefix="published."))
+        if len(alternatives) > 1:
             tuning.register(self.merge)
         else:
             self.merge.bind("replicated")

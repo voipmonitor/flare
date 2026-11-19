@@ -10,6 +10,7 @@ from .candidate_rows import PreparedCandidateRows
 from .collectives import PreparedAllGather
 from .ordered_row_topk import PreparedOrderedRowTopK
 from .owner_topk import PreparedOwnerTopK
+from .published_candidates import PreparedPublishedTopK
 
 
 class PreparedCandidateSelection:
@@ -17,14 +18,15 @@ class PreparedCandidateSelection:
 
     The replicated composition gathers every candidate on every rank. The
     owner composition selects each query on one rank and broadcasts final IDs.
-    Both use the same candidate preprocessing, cutoff ties and emission order.
+    Published rows let each owner read its queries from a shared candidate bank.
+    All compositions preserve candidate preprocessing, cutoff ties and emission order.
     Preparation binds one composition before model compilation; serving has
     no runtime choice. Serial calls may share storage and transport channels.
     """
 
     def __init__(self, indices, scores, positions, rank, output, *, world, gather_runtime,
                  owner_runtime, reduction_runtime, session, coordinator, name, buffers,
-                 dependencies=(), alternatives=("replicated", "owner"), local_counts=None):
+                 dependencies=(), alternatives=("replicated", "owner"), local_counts=None, published=None, published_buffers=None):
         rows, topk = indices.shape
         if (indices.dtype != torch.int32 or scores.shape != indices.shape or scores.dtype != torch.float32
                 or positions.shape != (rows,) or positions.dtype != torch.int64
@@ -34,7 +36,7 @@ class PreparedCandidateSelection:
                 or any(not value.is_contiguous() or value.device != indices.device
                        for value in (indices, scores, positions, rank, output) if value is not None)):
             raise ValueError("candidate merging requires matching contiguous local rows and global output IDs")
-        if not alternatives or not set(alternatives) <= {"replicated", "owner"}:
+        if not alternatives or not set(alternatives) <= {"replicated", "owner", "published"}:
             raise ValueError("candidate merging requires supported prepared alternatives")
         if (local_counts is not None and (local_counts.shape != (rows,) or local_counts.dtype != torch.int32
                 or local_counts.device != indices.device or not local_counts.is_contiguous())):
@@ -51,9 +53,10 @@ class PreparedCandidateSelection:
         self.alternatives = tuple(alternatives)
         self.implementation = None
         self.active = buffers.zeros((rows,), torch.bool)
-        self.gather = self.owner = None
-        if "replicated" in alternatives:
+        self.gather = self.owner = self.published = None
+        if "replicated" in alternatives or "published" in alternatives:
             self.packed = buffers.zeros((rows, topk, 2), torch.float32)
+        if "replicated" in alternatives:
             self.gathered = buffers.zeros((rows, topk*world, 2), torch.float32)
             self.values = buffers.zeros((rows, topk*world), torch.float32)
             self.global_ids = buffers.zeros((rows, topk*world), torch.int32)
@@ -76,6 +79,12 @@ class PreparedCandidateSelection:
                 owner_runtime=owner_runtime, reduction_runtime=reduction_runtime, session=session,
                 coordinator=coordinator, name=name+".owner", buffers=buffers, local_counts=local_counts)
             self.owner.transport.dependencies = self.dependencies
+        if "published" in alternatives:
+            if published is None or published_buffers is None:
+                raise ValueError("published row selection requires its shared stage and declaration buffers")
+            self.published = PreparedPublishedTopK(self.packed, self.active, rank, output, storage=published,
+                gather_runtime=gather_runtime, reduction_runtime=reduction_runtime,
+                session=session, coordinator=coordinator, name=name+".published", buffers=published_buffers)
 
     def bind(self, implementation):
         if implementation not in self.alternatives:
@@ -88,6 +97,8 @@ class PreparedCandidateSelection:
         if implementation == "owner" and self.owner is not None:
             return (("transport", self.owner.transport.plan), ("selection", self.owner.fold.plan),
                     ("replication", self.owner.broadcast.reduction.plan))
+        if implementation == "published" and self.published is not None:
+            return self.published.plans()
         raise ValueError("candidate selection implementation has no prepared plans")
 
     def functional(self, *, session):
@@ -120,7 +131,7 @@ class PreparedCandidateSelection:
             owner_ids.copy_(torch.where(live, indices * self.world + self.rank, -1).to(torch.int32))
             owner_scores.copy_(torch.where(live, scores, -torch.inf))
             return planar
-        if implementation == "replicated":
+        if implementation in ("replicated", "published"):
             packed = (torch.empty((self.rows, self.topk, 2), dtype=torch.float32, device=scores.device)
                       if dynamic else self.packed)
             packed[:, :, 0].copy_(torch.where(live, scores, -torch.inf))
@@ -137,6 +148,8 @@ class PreparedCandidateSelection:
         implementation = self.implementation if implementation is None else implementation
         if packed is not None:
             active = positions >= 0
+            if implementation == "published":
+                return self.published(packed, active, dependencies=dependencies), None
             if implementation == "owner":
                 return self.owner(packed[self.rows:].view(torch.int32), packed[:self.rows],
                                   active, dependencies=dependencies), None
@@ -147,6 +160,9 @@ class PreparedCandidateSelection:
                 return self.fold._run(values, lengths, indices)
         else:
             self.active.copy_((self.positions if positions is None else positions) >= 0)
+            if implementation == "published":
+                self.output.copy_(self.published(self.packed, self.active, dependencies=self.dependencies))
+                return self.output, None
             if implementation == "owner":
                 return self.owner(), None
             if implementation == "replicated":

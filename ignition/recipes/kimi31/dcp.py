@@ -54,6 +54,7 @@ class ContextParallel:
     index_signals: tuple = ()
     selections: object = None
     candidate_owners: object = None
+    published_candidates: object = None
     selection_tuning: object = None
     groups: tuple = ()
 
