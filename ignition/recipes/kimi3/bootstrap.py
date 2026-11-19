@@ -259,6 +259,25 @@ def _benchmark_state(buffers, pool, requests, speculation):
     return state
 
 
+def _register_speculative_graphs(speculation, shapes, inputs, register):
+    """Register every packed graph with its own draft vocabulary prefix."""
+    from functools import partial
+    from ignition.components.parallel_draft import PreparedParallelDraftRound
+
+    for batch, width, packed in sorted(shapes, key=lambda shape: (shape[2], shape[0]), reverse=True):
+        name = f"speculative{batch}x{width}-tokens{packed}"
+        round_forwards = speculation.forwards
+        if (batch == 1 and 1 < packed < width and getattr(speculation, "block_proposal_broadcast", False)
+                and isinstance(speculation.weights.config.draft, DSparkConfig)):
+            # Preserve the complete local GEMM. Only this prefix enters the fused sampler.
+            round_forwards = replace(round_forwards, draft=partial(round_forwards.draft, gather_rows=packed - 1))
+        operation = PreparedParallelDraftRound(speculation, batch, width, name, target_token_capacity=packed,
+                                              forwards=round_forwards)
+        operation.prepare()
+        register(name, operation, "speculative", batch, width, (*inputs.buffers(), "sampling_grammar_mask"),
+                 enabled=True, packed_tokens=packed)
+
+
 @torch.no_grad()
 @with_autotune_effort
 def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
@@ -545,20 +564,7 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                             (*forward_inputs, *(vision_prefill.buffers() if mode == "prefill" and patches else ())),
                             enabled=enabled)
             if speculation is not None:
-                from functools import partial
-                from ignition.components.parallel_draft import PreparedParallelDraftRound
-
-                for batch, width, packed in sorted(config.speculative_round_shapes, key=lambda shape: (shape[2], shape[0]), reverse=True):
-                    name = f"speculative{batch}x{width}-tokens{packed}"
-                    forwards = speculation.forwards
-                    if (batch == 1 and 1 < packed < width and getattr(speculation, "block_proposal_broadcast", False)
-                            and isinstance(weights.config.draft, DSparkConfig)):
-                        # Preserve the complete local GEMM. Only this prefix enters the fused sampler.
-                        forwards = replace(forwards, draft=partial(forwards.draft, gather_rows=packed - 1))
-                    forward = PreparedParallelDraftRound(speculation, batch, width, name,
-                        target_token_capacity=packed, forwards=forwards)
-                    forward.prepare()
-                    add(name, forward, "speculative", batch, width, (*inputs.buffers(), "sampling_grammar_mask"), enabled=True, packed_tokens=packed)
+                _register_speculative_graphs(speculation, config.speculative_round_shapes, inputs, add)
 
             for capacity in reversed(patches):
                 name = f"vision{capacity}"
