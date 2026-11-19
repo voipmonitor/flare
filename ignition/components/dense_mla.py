@@ -18,11 +18,13 @@ def _attend(q: torch.Tensor, cache: torch.Tensor, output: torch.Tensor, pages: t
             lengths: torch.Tensor, starts: torch.Tensor, scratch: list[torch.Tensor], handle: int, scale: float,
             lse: torch.Tensor | None, kv_scale: torch.Tensor | None, q_scale: torch.Tensor | None) -> None:
     plan = plan_from_handle(handle)
+    direct_lse = (lse is not None and lse.dtype == torch.float32 and lse.device == q.device and lse.is_contiguous()
+                  and lse.shape == (plan.query.query_rows, plan.query.num_q_heads))
     binding = dense_mla.bind(plan, q=q, kv_cache=cache, output=output, page_table=pages,
         cache_seqlens=lengths, cu_seqlens_q=starts, scratch=scratch, sm_scale=scale,
-        kv_scale=kv_scale, q_scale=q_scale)
+        kv_scale=kv_scale, q_scale=q_scale, lse_output=lse if direct_lse else None)
     _, logsumexp = dense_mla.run(binding=binding)
-    if lse is not None:
+    if lse is not None and not direct_lse:
         lse.copy_(logsumexp)
 
 
@@ -34,7 +36,8 @@ def _fake_attend(q, cache, output, pages, lengths, starts, scratch, handle, scal
 class PreparedDenseMLA:
     """Dense MLA over a paged cache; an E4M3 cache defaults to unit query and cache scales.
 
-    With ``lse``, each query head's natural-log LSE [rows, heads] is copied out beside the output.
+    With ``lse``, the selected kernel writes its per-head log normalizers directly
+    into a contiguous full-capacity destination. Other destination layouts receive a copy.
     """
 
     def __init__(self, query, cache, output, page_table, lengths, starts, *, caps, scale, session, name, workspace,
