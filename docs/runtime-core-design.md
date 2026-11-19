@@ -699,7 +699,7 @@ permissions remain allocation-specific. The layout uses ordinary CUDA VMM
 allocations at the recorded core addresses and requires no core re-export,
 additional framebuffer reserve, allocation retry, or reduced cache capacity.
 
-Before allocating backing, Helios counts one physical handle for each fixed
+On a single Linux host, before allocating backing, Helios counts one physical handle for each fixed
 allocation or cache chunk and one mapping for each actual device reader of each
 virtual address. If the estimated total reaches the RM handle range, the planner
 packs the longest contiguous span available in a single plane at each snapshot
@@ -717,6 +717,11 @@ Wider bands can exclude more pages while a snapshot is retained. Both policies
 keep the planned number of KV pages, snapshot slots and physical bytes. The RM
 estimate covers the model's VMM objects. Other driver objects also consume
 handles.
+
+Multi-host cache agreement exchanges page and row counts. Each host uses the
+same canonical layout and includes its snapshot conflict ranges in the
+scheduler contract hash. Other operating systems also retain canonical
+placement.
 
 Native startup and C1/C4 generation with 32K prefill are qualified for Kimi K3.1
 Pro TP16 cores using DCP8 and DCP16 on sixteen RTX PRO 6000 Blackwell GPUs with

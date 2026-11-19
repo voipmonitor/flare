@@ -460,12 +460,22 @@ impl Layout {
 // handle range (RS_UNIQUE_HANDLE_RANGE) contains 524,288 entries.
 pub(super) const RM_HANDLE_RANGE: u64 = 1 << 19;
 
+pub(super) fn local_handle_limit(os: &str, clustered: bool) -> Option<u64> {
+    (os == "linux" && !clustered).then_some(RM_HANDLE_RANGE)
+}
+
 pub(super) fn compact_cache_layouts(
     ranks: &[NativeResources],
     geometry: &[CacheGeometry],
     layouts: &mut [Layout],
     execution: u64,
+    limit: Option<u64>,
 ) -> Result<(u64, u64)> {
+    // Multi-host agreement carries page and row capacities, not per-host VMM
+    // charges. Its scheduler contract requires the same snapshot conflicts.
+    let Some(limit) = limit else {
+        return Ok((0, 0));
+    };
     let mut before = 0u64;
     let mut counts = Vec::with_capacity(ranks.len());
     for ((rank, g), layout) in ranks.iter().zip(geometry).zip(layouts.iter()) {
@@ -488,7 +498,7 @@ pub(super) fn compact_cache_layouts(
             .ok_or_else(|| invalid("mapping handle count overflow"))?;
         counts.push((row, planes, cache));
     }
-    let after = plan_mapping_handles(geometry, layouts, execution, before, counts)?;
+    let after = plan_mapping_handles(geometry, layouts, execution, before, counts, limit)?;
     Ok((before, after))
 }
 
@@ -498,12 +508,13 @@ fn plan_mapping_handles(
     execution: u64,
     mut total: u64,
     mut counts: Vec<(u64, Vec<u64>, u64)>,
+    limit: u64,
 ) -> Result<u64> {
     // Preserve individual alias ranges when the normal plan fits, then
     // preserve all occupied low-page prefixes where longer runs suffice.
     // Only explore larger page groups if that plan still exhausts the range.
     let mut granules = 0u64;
-    while total >= RM_HANDLE_RANGE {
+    while total >= limit {
         let mut whole_planes = granules > 0;
         for ((layout, g), (row, planes, charge)) in
             layouts.iter_mut().zip(geometry).zip(&mut counts)
@@ -837,7 +848,15 @@ mod tests {
         assert!(prefix_handles >= RM_HANDLE_RANGE);
         let original = 3528 + 16 * prior;
         let counts = vec![(1, readers.clone(), prior); 16];
-        let after = plan_mapping_handles(&geometries, &mut layouts, 2, original, counts).unwrap();
+        let after = plan_mapping_handles(
+            &geometries,
+            &mut layouts,
+            2,
+            original,
+            counts,
+            RM_HANDLE_RANGE,
+        )
+        .unwrap();
         assert!(after < RM_HANDLE_RANGE);
         assert_eq!(
             after,
@@ -862,6 +881,26 @@ mod tests {
         eprintln!(
             "4096 KV pages, 206 snapshot rows: {original} ordinary, {prefix_handles} preserving prefixes, {after} selected VMM handles"
         );
+    }
+
+    #[test]
+    fn per_host_charges_cannot_change_cluster_or_non_linux_snapshot_ranges() {
+        assert_eq!(local_handle_limit("linux", false), Some(RM_HANDLE_RANGE));
+        let units = [vec![73_728; 24], vec![16_896; 24]].concat();
+        let g = geometry(35_122_432, &units, 3103, 159);
+        let make = || Layout::new(&g, 2, &[2 << 20; 48], 2 << 20).unwrap();
+        let canonical = make().aliases;
+        for (os, cluster) in [("linux", true), ("windows", false), ("windows", true)] {
+            let limit = local_handle_limit(os, cluster);
+            assert_eq!(limit, None);
+            let mut layouts = [make()];
+            assert_eq!(
+                compact_cache_layouts(&[], std::slice::from_ref(&g), &mut layouts, 2, limit)
+                    .unwrap(),
+                (0, 0)
+            );
+            assert_eq!(layouts[0].aliases, canonical);
+        }
     }
 
     #[test]

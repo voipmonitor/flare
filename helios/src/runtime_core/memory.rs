@@ -925,6 +925,7 @@ impl NativeModel {
             .collect::<Result<Vec<_>>>()?;
         let (original, planned) = super::cache_memory::compact_cache_layouts(
             &self.ranks, &geometry, &mut layouts, execution,
+            super::cache_memory::local_handle_limit(std::env::consts::OS, self.cluster().is_some()),
         )?;
         if original != planned {
             progress.phase("Place cache backing", None).finish(format!(
