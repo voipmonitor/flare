@@ -41,9 +41,10 @@ def recipe_help(model=None):
                      f" default {recipe.expert_scale_compression or 'native'}.")
     speculation = recipe.speculation
     if speculation is not None:
+        methods = tuple(dict.fromkeys(name for name in (speculation.method, *recipe.speculative_methods) if name))
+        if methods:
+            lines.append(f"  --speculative-method: {', '.join(methods)}; default {speculation.method or 'recipe draft'}")
         lines.extend((
-            *([] if speculation.method is None else [
-                f"  --speculative-method: {', '.join(dict.fromkeys((speculation.method, *recipe.speculative_methods)))}; default {speculation.method}"]),
             f"  --mtp-draft-tokens: 0..{recipe.max_draft_tokens}; default {speculation.draft_tokens}",
             f"  Verification: {'adaptive' if speculation.adaptive else 'fixed width'} by default;"
             " --no-mtp excludes draft weights and state.",

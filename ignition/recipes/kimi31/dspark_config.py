@@ -11,6 +11,25 @@ from ignition.components.parallel import TensorParallelShard
 
 DSPARK_REPOSITORY = "Inferact/Kimi-K3.1-Pro-DSpark-preview"
 DSPARK_REVISION = "6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94"
+WINDOW_REPOSITORY = "Inferact/Kimi-K3.1-Pro-DSpark"
+WINDOW_REVISION = "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"
+
+
+def window_draft(raw, target):
+    """Validate a Kimi K3.1 verifier and the geometry of its five sliding-window draft layers."""
+    from ignition.recipes.kimi3.config import DSparkConfig as WindowDraft
+
+    speculators = raw.get("speculators_config")
+    verifier = speculators.get("verifier") if isinstance(speculators, dict) else None
+    if (not isinstance(verifier, dict) or verifier.get("architectures") != ["KimiK31ForConditionalGeneration"]
+            or speculators.get("algorithm") != "dspark" or raw.get("dtype") != "bfloat16"
+            or raw.get("full_attention_causal") is not True or raw.get("block_size") != 7):
+        raise ValueError("Kimi K3.1 DSpark requires a seven-token causal BF16 draft for a Kimi K3.1 verifier")
+    draft = WindowDraft.from_dict(raw, target)
+    if ((draft.layers, draft.heads, draft.kv_heads, draft.head_dim, draft.window) != (5, 96, 16, 64, 2048)
+            or len(draft.auxiliary_layers) != 5 or draft.markov_rank != 512):
+        raise ValueError("Kimi K3.1 DSpark requires five grouped-query layers with 2048-token windows")
+    return draft
 
 
 @dataclass(frozen=True)

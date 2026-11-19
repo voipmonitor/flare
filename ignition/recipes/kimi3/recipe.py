@@ -27,7 +27,9 @@ def prepare(snapshot, plan, *, compile_forwards, kernel_cache, progress, retain_
                         speculative_token_capacity=plan.speculative_token_capacity,
                         speculative_graph_budget=plan.speculation.graph_budget or 64,
                         draft_head_quantization=plan.speculation.draft_head_quantization,
-                        draft_body_quantization=plan.speculation.draft_body_quantization)
+                        draft_body_quantization=plan.speculation.draft_body_quantization,
+                        markov_head_quantization=plan.speculation.markov_head_quantization,
+                        speculative_method=plan.speculation.method)
         directory = DRAFT_DIRECTORY if draft_directory is None else draft_directory
         if (Path(snapshot) / directory).is_dir():
             drafting["draft_checkpoint"] = str(Path(snapshot) / directory)

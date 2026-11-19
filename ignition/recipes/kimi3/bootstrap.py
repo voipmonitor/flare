@@ -106,6 +106,8 @@ class PreparationConfig:
     draft_checkpoint: Path | None = None
     draft_head_quantization: str | None = None
     draft_body_quantization: str | None = None
+    markov_head_quantization: str | None = None
+    speculative_method: str | None = None
     # Verification widths count the pending input and up to seven drafts.
     speculative_widths: tuple[int, ...] = tuple(range(1, 9))
     speculative_fixed_width: int | None = None
@@ -127,6 +129,9 @@ class PreparationConfig:
     mtp_only: bool = False
 
     def __post_init__(self):
+        if self.markov_head_quantization is not None and (
+                self.markov_head_quantization != "fp8" or self.speculative_method != "dspark"):
+            raise ValueError("row-scaled FP8 Markov weights require the sliding-window DSpark method")
         if self.mtp_only and (not self.drafting
                 or max(self.speculative_widths, default=1) <= 1 or self.speculative_fixed_width == 1):
             raise ValueError("--mtp-only requires enabled learned speculation with positive draft depth")
@@ -276,7 +281,9 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                                     draft_checkpoint=config.draft_checkpoint, peers=peers,
                                     vision=config.vision,
                                     draft_head_quantization=config.draft_head_quantization,
-                                    draft_body_quantization=config.draft_body_quantization)
+                                    draft_body_quantization=config.draft_body_quantization,
+                                    markov_head_quantization=config.markov_head_quantization,
+                                    speculative_method=config.speculative_method)
         del manifest
         release_unused()
     transient = contextlib.ExitStack()
@@ -330,7 +337,7 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                 convolution_collective = create_head_exchange(group, device,
                     max_rows=slots*(config.draft_tokens+1), heads=shard.world_size,
                     head_dim=4*weights.config.hidden//16//shard.world_size, ipc=core_storage.peer_storage)
-            else:
+            elif config.markov_head_quantization is None:
                 markov_collective = create_all_gather_runtime(group, device, max_rows=slots,
                     columns=2 * weights.config.vocabulary, ipc=core_storage.peer_storage)
         router_collective = create_all_gather_runtime(group, device, max_rows=channel_rows,
@@ -665,8 +672,8 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
             speculative_fixed_width=config.speculative_fixed_width)
         memory.update(speculative_round_shapes=config.speculative_round_shapes,
                       speculative_graph_budget=config.speculative_graph_budget)
-    aliases = (("weights.draft.embedding", "weights.embedding"),) if (drafting and weights.config.dsa is not None
-        and not isinstance(weights.config.draft, DFlash2Config)) else ()
+    aliases = (("weights.draft.embedding", "weights.embedding"),) if (
+        drafting and getattr(weights.draft, "embedding", None) is weights.embedding) else ()
     state = None if config.benchmark_selection is None else _benchmark_state(buffers, pool, requests, speculation)
     return PreparedModel(rebuild_weights=declare_weights(weights,
         components=('embedding', 'norm', 'head', 'output_res_score', 'vision', 'draft'), aliases=aliases),
