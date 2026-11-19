@@ -222,13 +222,15 @@ def test_local_tp_ranks_measure_disjoint_candidates_and_replay_collectives(tmp_p
             process.join(timeout=180)
         assert [process.exitcode for process in processes] == [0] * 4
         reports = [connection.recv() for connection in connections]
-        all_candidates = [item for report in reports for item in report['candidates']]
+        all_candidates = [(name, index) for report in reports for name, index in report['candidates'] if name == 'projection']
         assert len(set(all_candidates)) == len(all_candidates)
         selections = []
         for rank, report in enumerate(reports):
-            assert report['shard'] == (rank, (0, 1, 2, 3))
+            assert report['shard'] == ((0, (0,)) if unequal else (rank, (0, 1, 2, 3)))
             assert report['candidates']
-            assert all(index % 4 == rank for _, index in report['candidates'])
+            assert all(index % 4 == rank for name, index in report['candidates'] if name == 'projection')
+            private = [index for name, index in report['candidates'] if name == 'private']
+            assert bool(private) == (unequal and rank == 3)
             selected = next(item for item in report['selections'] if item['name'] == 'projection')
             assert selected['source'] == 'tuned'
             assert selected['coverage']['measured_count'] == len(all_candidates)
