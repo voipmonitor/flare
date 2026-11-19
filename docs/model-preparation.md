@@ -217,9 +217,12 @@ defaults after tuning or a Python exception; preexisting manual clock locks
 are not restored. Memory clocks and tuning caches are unchanged.
 
 Without extra tuning replicas, tensor-parallel ranks on identical GPUs divide
-each kernel race's candidates and adopt the fastest measured configuration.
-This applies within one host as well as across hosts. Fixed collective kernels
-prepare on every participating rank.
+the candidates of a shared local kernel race and adopt its measured winner.
+When the model catalogs differ, preparation groups together each local request,
+its dependencies and its declaration aliases. A group can share a race when all
+ranks declare the same requests, candidate factories and memory requirements.
+The remaining local operations prepare on their owning ranks. Collective kernels
+prepare on every participating rank. This applies within one host and across hosts.
 
 Set `[preparation] autotune_effort = "audit"` for a persistent setting; an
 explicit flag wins. The plan carries the setting to every preparation rank
