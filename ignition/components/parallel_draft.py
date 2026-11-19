@@ -234,7 +234,8 @@ class PreparedParallelDraftRound:
             self.full_proposal = PreparedMarkovProposals(base, o.weights.draft.markov_embedding, head,
                 self.markov_token, self.drafts, self.probabilities, self.valid, o.requests,
                 o.inputs.row_slot_ids[:b], o.inputs.row_generations[:b], o.inputs.live_rows,
-                self.seed, self.base_offset, workspace=None)
+                self.seed, self.base_offset, workspace=None,
+                proposal_capacity=min(w - 1, self.target_token_capacity - 1))
             self.full_proposal.prepare()
             runtime = getattr(o, "result_runtime", None)
             if runtime is None:
