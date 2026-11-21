@@ -355,23 +355,49 @@ fn rank_commitments_are_verified_before_catalog_decoding() {
 
 #[test]
 fn selected_decoded_metadata_budget_is_checked_before_inflation() {
-    let ranks = vec![invalid_frame(schema::MAX_BODY as u64 - 4096); 5];
+    let count = schema::MAX_SELECTED_RANK_METADATA / schema::MAX_BODY as u64 + 1;
+    let ranks = vec![invalid_frame(schema::MAX_BODY as u64 - 4096); count as usize];
     let (bytes, publishers) = signed(&ranks);
     assert!(bytes.len() < 4096);
     let error = protection::verify(&bytes, &publishers, selected(None))
         .err()
         .unwrap()
         .to_string();
+    let expected_bytes: u64 = ranks
+        .iter()
+        .enumerate()
+        .map(|(index, body)| {
+            let mut body = body.clone();
+            body.rank = index as u32;
+            for resource in &mut body.resources {
+                resource.resource_id += index as u64;
+            }
+            crate::core::prepared_weights::reconstructed_rank_nbytes(&body, body.encode_to_vec().len())
+                .unwrap()
+        })
+        .sum();
     assert!(
-        error.contains("selected reconstructed rank metadata exceeds its limit"),
+        error.contains(&format!(
+            "selected reconstructed rank metadata exceeds its limit through rank {}: {expected_bytes} bytes, maximum {}",
+            count - 1,
+            schema::MAX_SELECTED_RANK_METADATA
+        )),
         "{error}"
     );
 }
 
 #[test]
+fn sixteen_rank_weight_layouts_fit_before_inflating_their_catalogs() {
+    let (bytes, publishers) = signed(&vec![invalid_frame(40 << 20); 16]);
+    let error = protection::verify(&bytes, &publishers, selected(None)).err().unwrap().to_string();
+    assert!(error.contains("decode prepared weight catalog"), "{error}");
+}
+
+#[test]
 fn unselected_catalogs_do_not_consume_decoded_budget_or_decode_untrusted_frames() {
     let mut ranks = vec![compressed_body()];
-    ranks.extend(vec![invalid_frame(schema::MAX_BODY as u64 - 4096); 5]);
+    let over_budget = schema::MAX_SELECTED_RANK_METADATA / schema::MAX_BODY as u64 + 1;
+    ranks.extend(vec![invalid_frame(schema::MAX_BODY as u64 - 4096); over_budget as usize]);
     let (bytes, publishers) = signed(&ranks);
     let verified = protection::verify(&bytes, &publishers, selected(Some(0))).unwrap();
     assert_eq!(verified.ranks().len(), 1);

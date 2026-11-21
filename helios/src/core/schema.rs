@@ -25,8 +25,11 @@ pub const FORMAT_VERSION: u32 = 2;
 pub const MAX_BODY: usize = 128 << 20;
 /// Bound on the complete serialized envelope.
 pub const MAX_ENVELOPE: usize = 128 << 20;
-/// Bound on reconstructed rank metadata selected by one verification.
-pub const MAX_SELECTED_RANK_METADATA: u64 = 512 << 20;
+/// Bound on all selected, reconstructed rank bodies before inflating their
+/// compressed weight catalogs. Limits aggregate host memory committed during
+/// verification while allowing 16-rank MoE cores (~37 MiB per rank, each
+/// within `MAX_BODY`).
+pub const MAX_SELECTED_RANK_METADATA: u64 = 1 << 30;
 /// Executable compressed chunk size. Authentication covers chunks of exactly this size.
 pub const MAX_CHUNK: usize = 4 << 20;
 /// Bound on compressed chunks for one executable resource (4 TiB at the fixed chunk size).

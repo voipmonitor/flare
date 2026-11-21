@@ -253,7 +253,7 @@ both forms. Rank signatures authenticate compressed bytes
 before catalog decoding. Decoding requires an exact length, a window no larger
 than 8 MiB, and one complete frame without trailing bytes. Reconstructing a
 rank's inline metadata must fit within 128 MiB; selected ranks together must
-fit within 512 MiB. The signed envelope limit is 128 MiB. Keyless
+fit within 1 GiB. The signed envelope limit is 128 MiB. Keyless
 container conversion preserves compressed catalogs without decoding them.
 Verification checks the size bounds for all selected ranks before decoding
 any catalog. Consumers decode one catalog at a time; verified rank records
