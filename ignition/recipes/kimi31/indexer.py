@@ -8,8 +8,9 @@ from typing import NamedTuple
 import torch
 
 from ignition.components.candidate_selection import PreparedCandidateSelection
-from ignition.components.fp8_indexer import PreparedFP8Indexer, write_fp8_index_keys
+from ignition.components.fp8_indexer import PreparedFP8Indexer, norm_and_write_fp8_index_keys, write_fp8_index_keys
 from ignition.components.linear import UnquantizedProjection
+from ignition.components.row_ownership import PreparedGatheredRows
 from ignition.preparation.tuning import register_finalizer
 from ignition.preparation.scratch import buffer_rows
 
@@ -83,16 +84,25 @@ class PreparedIndexSelection:
         if shards.world > 1 and runtime is None:
             raise ValueError("Kimi sparse selection requires a candidate exchange for every context rank")
         tuning = None if context is None else getattr(context, "selection_tuning", None)
-        tune = tuning is not None and mode != "prefill" and metadata.starts.numel() == 1
+        owner_rows = -(-rows // shards.world)
+        published = None if context is None else getattr(context, "published_candidates", None)
+        tune = tuning is not None and metadata.starts.numel() == 1
+        if tune and published is not None and PreparedGatheredRows.fits(self.selected[:owner_rows], runtime):
+            alternatives = ("replicated", "published")
+        elif tune and mode != "prefill":
+            alternatives = ("replicated", "owner")
+        else:
+            alternatives = ("replicated",)
         self.merge = PreparedCandidateSelection(self.local, self.scores, metadata.positions[start:end],
             shards.index, self.selected, world=shards.world, gather_runtime=runtime,
             owner_runtime=context.candidate_owners if tune else None,
             reduction_runtime=tuning.reduction if tune else None, session=session,
             coordinator=None if context is None else context.coordinator, name=name + ".merge",
             buffers=SharedBuffers(buffers, query.device, prefix="merge."),
-            dependencies=(latent_cache,), alternatives=("replicated", "owner") if tune else ("replicated",),
-            local_counts=self.candidate_counts if tune else None)
-        if tune:
+            dependencies=(latent_cache,), alternatives=alternatives,
+            local_counts=self.candidate_counts if "owner" in alternatives else None,
+            published=published, published_buffers=SharedBuffers(buffers, query.device, prefix="published."))
+        if len(alternatives) > 1:
             tuning.register(self.merge)
         else:
             self.merge.bind("replicated")
@@ -104,10 +114,16 @@ class PreparedIndexSelection:
     def _release_examples(self):
         self.pages = self.lengths = self.local = self.scores = self.selected = self.candidate_counts = None
 
-    def prepare_local(self, query, weights, positions, tables, *, shared_index=None):
-        return self.prepare_local_result(query, weights, positions, tables, shared_index=shared_index)[0]
+    def prepare_local(self, query, weights, positions, tables, *, shared_index=None, raw_weights=False):
+        return self.prepare_local_result(query, weights, positions, tables,
+            shared_index=shared_index, raw_weights=raw_weights)[0]
 
-    def prepare_local_result(self, query, weights, positions, tables, *, shared_index=None):
+    def prepare_local_result(self, query, weights, positions, tables, *, shared_index=None, raw_weights=False):
+        result = self.score_local(query, weights, positions, tables,
+            shared_index=shared_index, raw_weights=raw_weights)
+        return (self.merge.pack(indices=result[0], scores=result[1]), *result)
+
+    def score_local(self, query, weights, positions, tables, *, shared_index=None, raw_weights=False):
         if shared_index is None:
             pages = torch.empty((1 if self.mode == "prefill" else self.rows, self.width * 2),
                                 dtype=torch.int32, device=query.device)
@@ -120,9 +136,9 @@ class PreparedIndexSelection:
             lengths = shared_index.lengths[self.start:self.start + self.rows]
         (indices, scores), quantized, scales, scaled_weights = self.indexer._run_observed(
             query.view(query.shape[0], 32, 128), weights,
-            pages.expand(self.rows, -1) if self.mode == "prefill" else pages, lengths)
-        packed = self.merge.pack(indices=indices, scores=scores)
-        return packed, indices, scores, quantized, scales, scaled_weights
+            pages.expand(self.rows, -1) if self.mode == "prefill" else pages, lengths,
+            raw_pre_scale=(32 ** -.5) if raw_weights else None)
+        return indices, scores, quantized, scales, scaled_weights
 
     def exchange(self, packed, positions, *, dependencies=()):
         return self.exchange_result(packed, positions, dependencies=dependencies)[0]
@@ -202,20 +218,42 @@ class PreparedDSAIndexer:
         return (*[projection.plan for projection in self.projections],
                 *[plan for indexer in indexers for plan in (indexer.query_plan, indexer.selection.plan)])
 
-    def project(self, source, query_latent, metadata, *, slots=None):
-        query, _, _, head_weights = self.project_result(source, query_latent, metadata, slots=slots)
+    def project(self, source, query_latent, metadata, *, slots=None, scale_weights=True):
+        query = self.projections[0](query_latent)
+        raw_key = self.projections[1](source)
+        head_weights = self.projections[2](source)
+        if scale_weights:
+            head_weights = head_weights * (32 ** -.5)
+        if slots is None:
+            slots = self.shards.token_slots(metadata.positions, metadata.token_page_table)
+        norm_and_write_fp8_index_keys(
+            raw_key,
+            self.weights["indexer.k_norm.weight"],
+            self.weights["indexer.k_norm.bias"],
+            self.eps,
+            slots,
+            self.cache,
+            hadamard=False,
+            power_of_two=False,
+        )
         return query, head_weights
 
     def project_result(self, source, query_latent, metadata, *, slots=None):
         query = self.projections[0](query_latent)
-        key = self.projections[1](source).float()
+        raw_key = self.projections[1](source)
         head_weights = self.projections[2](source) * (32 ** -.5)
-        centered = key - key.mean(-1, keepdim=True)
-        variance = centered.square().mean(-1, keepdim=True)
-        normalized_key = (centered * torch.rsqrt(variance + self.eps)
-            * self.weights["indexer.k_norm.weight"].float()
-            + self.weights["indexer.k_norm.bias"].float()).to(source.dtype)
         if slots is None:
             slots = self.shards.token_slots(metadata.positions, metadata.token_page_table)
-        write_fp8_index_keys(normalized_key, slots, self.cache, hadamard=False, power_of_two=False)
-        return query, key.to(source.dtype), normalized_key, head_weights
+        normalized_key = torch.empty_like(raw_key)
+        norm_and_write_fp8_index_keys(
+            raw_key,
+            self.weights["indexer.k_norm.weight"],
+            self.weights["indexer.k_norm.bias"],
+            self.eps,
+            slots,
+            self.cache,
+            hadamard=False,
+            power_of_two=False,
+            out=normalized_key,
+        )
+        return query, raw_key, normalized_key, head_weights

@@ -167,3 +167,45 @@ class PreparedOwnedRowBroadcast:
         torch.library.wrap_triton(_decode_owned_rows)[grid](
             received, output.view(torch.uint8), ROW_BYTES=self.row_bytes, BLOCK=1024, num_warps=4)
         return output
+
+
+class PreparedGatheredRows:
+    """Gather complete packets of owned rows and restore contiguous rank order."""
+
+    @staticmethod
+    def fits(source, runtime):
+        if runtime is None:
+            return False
+        packet_bytes = runtime.heads_per_rank * runtime.query_head_dim * torch.bfloat16.itemsize
+        row_bytes = source.shape[1] * source.element_size()
+        return (packet_bytes % row_bytes == 0 and source.nbytes % packet_bytes == 0
+                and 0 < source.nbytes // packet_bytes <= runtime.max_batch_size)
+
+    def __init__(self, source, output, *, runtime, session, coordinator, name, buffers):
+        from .collectives import PreparedAllGather
+
+        self.source, self.output = source, output
+        self.rows, self.columns = output.shape
+        self.world, self.owned = runtime.world_size, source.shape[0]
+        self.packet_width = runtime.heads_per_rank * runtime.query_head_dim
+        if not self.fits(source, runtime) or self.owned != -(-self.rows // self.world):
+            raise ValueError("owned rows must occupy whole gather packets and cover the output")
+        self.packets = source.nbytes // (self.packet_width * torch.bfloat16.itemsize)
+        self.gather = PreparedAllGather(source.view(torch.bfloat16).view(self.packets, self.packet_width),
+            buffers.zeros((self.packets, self.packet_width * self.world), torch.bfloat16), runtime=runtime,
+            session=session, coordinator=coordinator, name=name)
+
+    def functional(self, *, session):
+        self.gather.functional(session=session)
+        self.source = self.output = None
+        return self
+
+    def __call__(self, source=None):
+        owned = self.source if source is None else source
+        packets = self.gather(owned.view(torch.bfloat16).view(self.packets, self.packet_width))
+        by_rank = packets.view(owned.dtype).reshape(self.packets, self.world, -1, self.columns)
+        result = by_rank.transpose(0, 1).reshape(self.world * self.owned, self.columns)[:self.rows]
+        if source is None:
+            self.output.copy_(result)
+            return self.output
+        return result

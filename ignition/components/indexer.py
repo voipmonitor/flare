@@ -91,9 +91,9 @@ class PreparedSparseIndexer:
         if self.output is not None:
             return dsa_indexer.run(self.binding)
         shape, stride, dtype = self.output_layout
-        output = torch.empty_strided(shape, stride, dtype=dtype, device=query.device).fill_(-1)
+        output = torch.empty_strided(shape, stride, dtype=dtype, device=query.device)
         scores = None if self.score_layout is None else torch.empty_strided(self.score_layout[0], self.score_layout[1],
-            dtype=self.score_layout[2], device=query.device).zero_()
+            dtype=self.score_layout[2], device=query.device)
         scratch, = (torch.empty(shape, dtype=dtype, device=query.device) for shape, dtype in self.scratch_layout)
         _select(query, weights, self.inputs["index_k_cache"] if cache is None else cache, page_table,
                 lengths, active_width, output, scores, scratch, self.plan.handle)

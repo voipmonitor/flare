@@ -16,6 +16,8 @@ a slab beside the chunk's own records and attends with this rank's heads.
 from typing import NamedTuple
 
 import torch
+import triton
+import triton.language as tl
 from b12x.attention import dense_mla
 
 from ignition.components.collectives import PreparedAllGather, PreparedChunkedAllGather, PreparedLseReduceScatter
@@ -33,11 +35,59 @@ from .projections import prepare_projection
 FP8 = torch.float8_e4m3fn
 
 
+@triton.jit
+def _quantize_absorbed_with_rope_kernel(
+    Absorbed,
+    Rope,
+    Out,
+    abs_row_stride,
+    abs_head_stride,
+    rope_row_stride,
+    rope_head_stride,
+    out_row_stride,
+    out_head_stride,
+    HEADS: tl.constexpr,
+):
+    """Fuse absorbed[:, :, 512:].copy_(rope) + float().clamp(-448, 448).to(e4m3) in 1 launch."""
+    idx = tl.program_id(0).to(tl.int64)
+    row = idx // HEADS
+    head = idx - row * HEADS
+    cols = tl.arange(0, 512)
+    nope = tl.load(Absorbed + row * abs_row_stride + head * abs_head_stride + cols).to(tl.float32)
+    nope_q = tl.minimum(tl.maximum(nope, -448.0), 448.0).to(tl.float8e4nv)
+    tl.store(Out + row * out_row_stride + head * out_head_stride + cols, nope_q)
+    rcols = tl.arange(0, 64)
+    rope = tl.load(Rope + row * rope_row_stride + head * rope_head_stride + rcols).to(tl.float32)
+    rope_q = tl.minimum(tl.maximum(rope, -448.0), 448.0).to(tl.float8e4nv)
+    tl.store(Out + row * out_row_stride + head * out_head_stride + 512 + rcols, rope_q)
+
+
+def quantize_absorbed_with_rope(absorbed, rope):
+    """Fused tail merge + E4M3 quantization for MLA decode/verify absorbed queries."""
+    tokens, heads, _ = absorbed.shape
+    out = torch.empty((tokens, heads, RECORD_BYTES), dtype=FP8, device=absorbed.device)
+    torch.library.wrap_triton(_quantize_absorbed_with_rope_kernel)[(tokens * heads,)](
+        absorbed,
+        rope,
+        out,
+        absorbed.stride(0),
+        absorbed.stride(1),
+        rope.stride(0),
+        rope.stride(1),
+        out.stride(0),
+        out.stride(1),
+        HEADS=heads,
+        num_warps=4,
+    )
+    return out
+
+
 class MLAProjectionOutput(NamedTuple):
     query_norm: torch.Tensor
     latent: torch.Tensor
     absorbed: torch.Tensor
     gate: torch.Tensor
+    rope: torch.Tensor | None = None
 
 
 class PreparedMLAProjection:
@@ -116,7 +166,7 @@ class PreparedMLAProjection:
             if hasattr(self, name):
                 setattr(self, name, None)
 
-    def project(self, source, metadata=None):
+    def project(self, source, metadata=None, *, skip_tail_copy=False):
         local = self.projections["latent_gate"](source)
         tokens = source.shape[0]
         query_norm = torch.empty((tokens, self.latent_width - RECORD_BYTES), dtype=source.dtype, device=source.device)
@@ -138,8 +188,10 @@ class PreparedMLAProjection:
             self.rotary(query[:, :, 128:], latent[:, 512:], metadata.positions)
         absorbed = torch.empty((tokens, self.heads, RECORD_BYTES), dtype=source.dtype, device=source.device)
         self.absorb(query[:, :, :128].transpose(0, 1), absorbed[:, :, :512].transpose(0, 1))
+        if skip_tail_copy:
+            return MLAProjectionOutput(query_norm, latent, absorbed, gate, query[:, :, 128:])
         absorbed[:, :, 512:].copy_(query[:, :, 128:])
-        return MLAProjectionOutput(query_norm, latent, absorbed, gate)
+        return MLAProjectionOutput(query_norm, latent, absorbed, gate, None)
 
     def finish(self, attended, projected):
         tokens = attended.shape[0]

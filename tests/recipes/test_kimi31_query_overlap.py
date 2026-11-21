@@ -3,6 +3,7 @@
 
 """Query gathers retain explicit fork/join dependencies and serialized peer exchange."""
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -31,7 +32,7 @@ def test_concurrent_gather_declares_lifetimes_and_rejects_caller_scratch(monkeyp
                              dependencies=[cache], handle=23)
     local_plans = (Plan(1024), Plan(2048))
     operation = collectives.ConcurrentAllGather(gather, workspace=arena, session=None,
-                                                parallel_plans=local_plans)
+                                                parallel_plans=local_plans, send_buffer=torch.empty_like(source))
     assert arena._parallel_plans == [(plan, local_plans[0]), (plan, local_plans[1])]
     calls = []
     monkeypatch.setattr(collectives, '_start_all_gather', lambda *args: calls.append(('start', args)))
@@ -45,12 +46,39 @@ def test_concurrent_gather_declares_lifetimes_and_rejects_caller_scratch(monkeyp
         operation.validate_scratch()
 
 
+def test_async_gather_keeps_sent_bytes_after_the_main_stream_reuses_input(monkeypatch):
+    class Owner:
+        pass
+
+    source = torch.arange(8, dtype=torch.float32)
+    owner = Owner()
+    owner.concurrent_input = torch.empty_like(source)
+    monkeypatch.setitem(collectives._OWNERS, 17, owner)
+    stream = object()
+    observed = []
+
+    def wait(main):
+        assert main is stream
+        torch.testing.assert_close(owner.concurrent_input, source)
+
+    monkeypatch.setattr(torch.cuda, 'current_stream', lambda device: stream)
+    monkeypatch.setattr(torch.cuda, 'ExternalStream', lambda handle, device: SimpleNamespace(wait_stream=wait))
+    monkeypatch.setattr(torch.cuda, 'stream', lambda _: nullcontext())
+    monkeypatch.setattr(collectives, '_gather_columns', lambda value, out, handle: observed.append(value))
+
+    expected = source.clone()
+    collectives._start_all_gather(source, torch.empty_like(source), [], 17, 23)
+    source.fill_(-1)
+    assert observed[0] is owner.concurrent_input
+    torch.testing.assert_close(observed[0], expected)
+
+
 @pytest.mark.parametrize('single,roce,overlap', [(True, False, True), (False, True, True), (False, False, False)])
 def test_gather_fork_rejects_unsupported_channel_or_disabled_overlap(single, roce, overlap):
     gather = SimpleNamespace(single=single, roce=roce)
     with pytest.raises(ValueError):
         collectives.ConcurrentAllGather(gather, workspace=ScratchArena('cpu', overlap=overlap),
-                                        session=None, parallel_plans=(Plan(),))
+                                        session=None, parallel_plans=(Plan(),), send_buffer=torch.empty(1))
 
 
 def test_fx_fork_join_and_candidate_exchange_name_all_storage_dependencies():
@@ -84,7 +112,7 @@ def test_fx_fork_join_and_candidate_exchange_name_all_storage_dependencies():
 
 @pytest.mark.parametrize('rows,mode,overlap,expected', [
     (1, 'decode', True, True), (1, 'decode', False, False),
-    (2, 'decode', True, False), (1, 'verify', True, False), (1, 'prefill', True, False),
+    (2, 'decode', True, True), (1, 'verify', True, True), (1, 'prefill', True, False),
 ])
 def test_query_overlap_only_declared_for_single_row_decode(monkeypatch, rows, mode, overlap, expected):
     def projection(self, weights, source, metadata, cache, **kwargs):
@@ -116,7 +144,8 @@ def test_query_overlap_only_declared_for_single_row_decode(monkeypatch, rows, mo
     context = SimpleNamespace(shards=ContextShards.on(0, 16, 'cpu'), attention_constants=constants,
                               heads=object(), coordinator=None)
     cache = torch.zeros((1, 128, RECORD_BYTES), dtype=torch.float8_e4m3fn)
-    operation = attention.PreparedDSA({}, torch.zeros((rows, 8)), None, cache,
+    metadata = SimpleNamespace(starts=torch.zeros(1, dtype=torch.int32))
+    operation = attention.PreparedDSA({}, torch.zeros((rows, 8)), metadata, cache,
         index_cache=torch.zeros((2, 64 * 132), dtype=torch.uint8), eps=1e-5, mode=mode,
         session=None, name='attention', workspace=SimpleNamespace(overlap=overlap),
         buffers={}, context=context, peers=torch.zeros(16, dtype=torch.int64))
@@ -125,6 +154,8 @@ def test_query_overlap_only_declared_for_single_row_decode(monkeypatch, rows, mo
     if expected:
         gather, options = forks[0]
         assert options['parallel_plans'] is plans
+        assert options['send_buffer'].shape == (rows, 6 * RECORD_BYTES)
+        assert options['send_buffer'].dtype == torch.float8_e4m3fn
         assert gather.dependencies == [cache]
         assert selector.merge.dependencies == [gather.output]
     else:
@@ -176,12 +207,13 @@ def test_attention_joins_before_candidate_exchange_and_preserves_output(monkeypa
     op.shards = SimpleNamespace(token_slots=lambda *args: op.slots)
     op.mode = 'decode'
     op.history = None
-    projected = SimpleNamespace(latent=op.latent, absorbed=op.absorbed, query_norm=torch.ones(1))
+    op.reuse_records = False
+    projected = SimpleNamespace(latent=op.latent, absorbed=op.absorbed, query_norm=torch.ones(1), rope=None)
     op.heads = 1
     op.shards.world = 1
-    op.project = lambda source, metadata: events.append('projection') or projected
+    op.project = lambda source, metadata, *, skip_tail_copy=False: events.append('projection') or projected
     monkeypatch.setattr(attention, 'write_records', lambda *args: events.append('cache_write'))
-    op.indexer = SimpleNamespace(project=lambda *args: events.append('index_projection') or
+    op.indexer = SimpleNamespace(project=lambda *args, **kwargs: events.append('index_projection') or
         (torch.zeros((1, 4096)), torch.zeros((1, 32))), sharded=None,
         bounds=((0, 1),), query=torch.zeros((1, 4096)), head_weights=torch.zeros((1, 32)))
     packed, selected = torch.ones(4), torch.ones(4)
@@ -199,7 +231,7 @@ def test_attention_joins_before_candidate_exchange_and_preserves_output(monkeypa
             assert kwargs['dependencies'] == ((gathered,) if overlap else ())
             events.append('candidate_exchange')
             return selected
-        def prepare_local_result(self, query, weights, positions, tables):
+        def prepare_local_result(self, query, weights, positions, tables, **kwargs):
             return self.prepare_local(query, weights, positions, tables), None, None, None, None, None
         def exchange_result(self, packed_arg, positions, **kwargs):
             return self.exchange(packed_arg, positions, **kwargs), None

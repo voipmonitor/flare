@@ -2,7 +2,7 @@
 
 """Choose complete sparse-candidate compositions during model preparation."""
 
-from functools import partial
+from functools import cached_property, partial
 
 import torch
 from b12x.preparation import PreparedCall
@@ -36,7 +36,7 @@ def _candidate_pattern(rows, world, topk, rank, seed, count, *, partial_rows=Fal
 
 
 class _Fixture:
-    def __init__(self, rows, context, reduction, session):
+    def __init__(self, rows, context, reduction, session, alternatives=("replicated", "owner")):
         self.rows, self.context, self.step = rows, context, 0
         device, world = context.shards.index.device, context.shards.world
         self.values = {}
@@ -50,7 +50,9 @@ class _Fixture:
             context.shards.index, self.output, world=world, gather_runtime=context.candidates,
             owner_runtime=context.candidate_owners, reduction_runtime=reduction,
             session=session, coordinator=context.coordinator, name=f"selection_trial.rows{rows}",
-            buffers=SharedBuffers(self.values, device, prefix="merge."), local_counts=self.counts)
+            buffers=SharedBuffers(self.values, device, prefix="merge."), local_counts=self.counts, alternatives=alternatives,
+            published=getattr(context, "published_candidates", None),
+            published_buffers=SharedBuffers(self.values, device, prefix="published."))
         self.forwards = {kind: CandidateSelectionForward(self.selection, kind)
                          for kind in self.selection.alternatives}
         self.patterns = tuple(tuple(value.to(device) for value in _candidate_pattern(
@@ -84,7 +86,7 @@ class _Fixture:
 
 
 class CandidateSelectionTuning:
-    """Bind measured compositions for C1 decode and verification capacities.
+    """Bind measured compositions for sparse prefill, decode and verification rows.
 
     Child plans prepare with the model. Private trials use separate plans and
     tensors, then compare those selected plans with each model binding. Trial
@@ -95,76 +97,98 @@ class CandidateSelectionTuning:
         self.context, self.reduction = context, reduction
         self.cache_root = cache_root
         self.selections = {}
+        self.slot_groups = {}
 
     def register(self, selection):
         self.selections.setdefault(selection.rows, []).append(selection)
 
+    def register_slots(self, choice, merge):
+        self.slot_groups.setdefault(choice.geometry, []).append((choice, merge))
+
+    @cached_property
+    def supports_local_slots(self):
+        return self.supports_local_slots_rows(4)
+
+    def supports_local_slots_rows(self, rows):
+        cache = self.__dict__.setdefault("_supports_local_slots_cache", {})
+        if rows not in cache:
+            from .local_slots import supports_local_slots
+
+            cache[rows] = supports_local_slots(self.context, rows=rows)
+        return cache[rows]
+
     def tune(self, session):
-        if not self.selections:
+        if not self.selections and not self.slot_groups:
             return []
-        coordinator = self.context.coordinator
-        device = self.context.shards.index.device
-        report, graphs, compiled = [], {}, {}
-        with trial_session(session, device=device, coordinator=coordinator, collective_tuning="static") as trials:
-            fixtures = {rows: _Fixture(rows, self.context, self.reduction, trials)
-                        for rows in sorted(self.selections)}
-            trials.tune(show_progress=False)
-            for rows, fixture in fixtures.items():
-                for target in self.selections[rows]:
-                    for kind in fixture.selection.alternatives:
-                        measured = tuple((role, plan_identity(plan)) for role, plan in fixture.selection.plans(kind))
-                        actual = tuple((role, plan_identity(plan)) for role, plan in target.plans(kind))
-                        if measured != actual:
-                            raise ValueError("candidate trial plans differ from the model's prepared kernels")
-            forwards = {f"{kind}{rows}": forward for rows, fixture in fixtures.items()
-                        for kind, forward in fixture.forwards.items()}
-            signatures = {f"{kind}{rows}": GraphSignature("decode", 1, rows)
-                          for rows, fixture in fixtures.items() for kind in fixture.forwards}
-            for fixture in fixtures.values():
-                fixture.produce(0)
-            try:
-                graphs, compiled = capture_forwards(forwards, signatures, session=trials, device=device,
-                    stream=torch.cuda.Stream(device=device), pool=torch.cuda.graph_pool_handle(),
-                    coordinator=coordinator, report_catalog=False, cache_root=self.cache_root, retain_forwards=True)
+        report = []
+        if self.selections:
+            coordinator = self.context.coordinator
+            device = self.context.shards.index.device
+            graphs, compiled = {}, {}
+            with trial_session(session, device=device, coordinator=coordinator, collective_tuning="static") as trials:
+                fixtures = {rows: _Fixture(rows, self.context, self.reduction, trials, self.selections[rows][0].alternatives)
+                            for rows in sorted(self.selections)}
+                trials.tune(show_progress=False)
                 for rows, fixture in fixtures.items():
-                    for index in range(len(fixture.patterns)):
-                        fixture.produce(index)
+                    for target in self.selections[rows]:
+                        for kind in fixture.selection.alternatives:
+                            measured = tuple((role, plan_identity(plan)) for role, plan in fixture.selection.plans(kind))
+                            actual = tuple((role, plan_identity(plan)) for role, plan in target.plans(kind))
+                            if measured != actual:
+                                raise ValueError("candidate trial plans differ from the model's prepared kernels")
+                forwards = {f"{kind}{rows}": forward for rows, fixture in fixtures.items()
+                            for kind, forward in fixture.forwards.items()}
+                signatures = {f"{kind}{rows}": GraphSignature("decode", 1, rows)
+                              for rows, fixture in fixtures.items() for kind in fixture.forwards}
+                for fixture in fixtures.values():
+                    fixture.produce(0)
+                try:
+                    graphs, compiled = capture_forwards(forwards, signatures, session=trials, device=device,
+                        stream=torch.cuda.Stream(device=device), pool=torch.cuda.graph_pool_handle(),
+                        coordinator=coordinator, report_catalog=False, cache_root=self.cache_root, retain_forwards=True)
+                    for rows, fixture in fixtures.items():
+                        for index in range(len(fixture.patterns)):
+                            fixture.produce(index)
+                            torch.cuda.synchronize(device)
+                            coordinator.barrier(f"selection reference {rows}.{index}", coordinator.ranks)
+                            compiled[f"replicated{rows}"]()
+                            torch.cuda.synchronize(device)
+                            fixture.expected.append(fixture.output.clone())
+                        candidates = {}
+                        for kind in fixture.forwards:
+                            forward = compiled[f"{kind}{rows}"]
+                            producers = tuple(partial(fixture.produce, index) for index in range(3))
+                            call = PreparedCall(run=forward, output=fixture.output,
+                                produce=producers[0], benchmark_producers=producers,
+                                reset=partial(fixture.output.fill_, -91), validate=fixture.validate,
+                                owners=(fixture,), capture_safe=True, benchmark_repetitions=8)
+                            candidates[kind] = PreparedComposition(forward, fixture.selection.plans(kind), call)
+                        with trials._tuning_clocks():
+                            chosen = race_compositions(candidates, operation="candidate-selection",
+                                geometry=dict(rows=rows, world_size=self.context.shards.world, local_topk=2048, output_topk=2048),
+                                numerics="exact-fp32-words-ordered-ties",
+                                workload=dict(version=3, seeds=(101,102,103), counts=(256,8192,32768),
+                                              partial_last=True, counted_owner=True),
+                                default="replicated", session=trials, coordinator=coordinator,
+                                cache_policy="warm", resident_bytes=fixture.nbytes)
+                        fixture.produce(3)
                         torch.cuda.synchronize(device)
-                        coordinator.barrier(f"selection reference {rows}.{index}", coordinator.ranks)
-                        compiled[f"replicated{rows}"]()
+                        coordinator.barrier(f"selection holdout {rows}", coordinator.ranks)
+                        compiled[f"{chosen['implementation']}{rows}"]()
                         torch.cuda.synchronize(device)
-                        fixture.expected.append(fixture.output.clone())
-                    candidates = {}
-                    for kind in fixture.forwards:
-                        forward = compiled[f"{kind}{rows}"]
-                        producers = tuple(partial(fixture.produce, index) for index in range(3))
-                        call = PreparedCall(run=forward, output=fixture.output,
-                            produce=producers[0], benchmark_producers=producers,
-                            reset=partial(fixture.output.fill_, -91), validate=fixture.validate,
-                            owners=(fixture,), capture_safe=True, benchmark_repetitions=8)
-                        candidates[kind] = PreparedComposition(forward, fixture.selection.plans(kind), call)
-                    with trials._tuning_clocks():
-                        chosen = race_compositions(candidates, operation="candidate-selection",
-                            geometry=dict(rows=rows, world_size=self.context.shards.world, local_topk=2048, output_topk=2048),
-                            numerics="exact-fp32-words-ordered-ties",
-                            workload=dict(version=3, seeds=(101,102,103), counts=(256,8192,32768),
-                                          partial_last=True, counted_owner=True),
-                            default="replicated", session=trials, coordinator=coordinator,
-                            cache_policy="warm", resident_bytes=fixture.nbytes)
-                    fixture.produce(3)
-                    torch.cuda.synchronize(device)
-                    coordinator.barrier(f"selection holdout {rows}", coordinator.ranks)
-                    compiled[f"{chosen['implementation']}{rows}"]()
-                    torch.cuda.synchronize(device)
-                    fixture.validate()
-                    for selection in self.selections[rows]:
-                        selection.bind(chosen["implementation"])
-                    report.append(dict(rows=rows, **chosen))
-            finally:
-                for graph in graphs.values():
-                    graph.reset()
-                for forward in compiled.values():
-                    forward.retire_after_capture()
-                graphs.clear()
-                compiled.clear()
+                        fixture.validate()
+                        for selection in self.selections[rows]:
+                            selection.bind(chosen["implementation"])
+                        report.append(dict(rows=rows, **chosen))
+                finally:
+                    for graph in graphs.values():
+                        graph.reset()
+                    for forward in compiled.values():
+                        forward.retire_after_capture()
+                    graphs.clear()
+                    compiled.clear()
+        if self.slot_groups:
+            from .slot_tuning import tune_local_slots
+
+            report.extend(tune_local_slots(self, session))
         return report

@@ -28,6 +28,118 @@ def _write_keys(Keys, Cache, ScaleCache, Slots, stride, HADAMARD: tl.constexpr, 
                 stride, 64, 128, 448.0, HADAMARD=HADAMARD, POWER_OF_TWO_SCALE=POWER_OF_TWO_SCALE)
 
 
+@triton.jit
+def _norm_and_write_keys(
+    RawKeys,
+    Weight,
+    Bias,
+    NormOut,
+    Cache,
+    ScaleCache,
+    Slots,
+    raw_stride,
+    out_stride,
+    cache_stride,
+    eps,
+    HADAMARD: tl.constexpr,
+    POWER_OF_TWO_SCALE: tl.constexpr,
+    WRITE_OUT: tl.constexpr,
+):
+    row = tl.program_id(0).to(tl.int64)
+    dim = tl.arange(0, 128)
+    slot = tl.load(Slots + row)
+    key = tl.load(RawKeys + row * raw_stride + dim).to(tl.float32)
+    mean = tl.sum(key, axis=0) * (1.0 / 128.0)
+    centered = key - mean
+    variance = tl.sum(centered * centered, axis=0) * (1.0 / 128.0)
+    w = tl.load(Weight + dim).to(tl.float32)
+    b = tl.load(Bias + dim).to(tl.float32)
+    normed = (centered * tl.rsqrt(variance + eps) * w + b).to(tl.bfloat16)
+    if WRITE_OUT:
+        tl.store(NormOut + row * out_stride + dim, normed)
+    _write_pool(
+        Cache,
+        ScaleCache,
+        slot,
+        normed,
+        dim,
+        dim < 128,
+        slot >= 0,
+        cache_stride,
+        64,
+        128,
+        448.0,
+        HADAMARD=HADAMARD,
+        POWER_OF_TWO_SCALE=POWER_OF_TWO_SCALE,
+    )
+
+
+def norm_and_write_fp8_index_keys(raw_keys, weight, bias, eps, slots, cache, *, hadamard, power_of_two, out=None):
+    """Fused FP32 LayerNorm(128) + BF16 round + FP8 index key cache write."""
+    write_out = out is not None
+    norm_out = raw_keys if out is None else out
+    torch.library.wrap_triton(_norm_and_write_keys)[(raw_keys.shape[0],)](
+        raw_keys,
+        weight,
+        bias,
+        norm_out,
+        cache.view(torch.float8_e4m3fn),
+        cache.view(torch.float32),
+        slots,
+        raw_keys.stride(0),
+        norm_out.stride(0),
+        cache.stride(0),
+        float(eps),
+        HADAMARD=hadamard,
+        POWER_OF_TWO_SCALE=power_of_two,
+        WRITE_OUT=write_out,
+        num_warps=4,
+    )
+
+
+@triton.jit
+def _quantize_queries_and_weights_kernel(
+    q,
+    raw_weights,
+    q_out,
+    scale_out,
+    weights_out,
+    rows,
+    pre_scale,
+    weight_norm,
+    HEAD_DIM: tl.constexpr,
+    FP8_MAX: tl.constexpr,
+    BLOCK_R: tl.constexpr,
+    APPLY_PRE_SCALE: tl.constexpr,
+):
+    """Fused FP8 query quantization + BF16 head weight scaling (bitwise match to copy+mul+quant)."""
+    pid = tl.program_id(0)
+    row = pid * BLOCK_R + tl.arange(0, BLOCK_R)
+    row_mask = row < rows
+    dim = tl.arange(0, HEAD_DIM)
+    x = tl.load(
+        q + row[:, None] * HEAD_DIM + dim[None, :],
+        mask=row_mask[:, None],
+        other=0.0,
+    ).to(tl.float32)
+    absmax = tl.maximum(tl.max(tl.abs(x), axis=1), 1e-4)
+    scale = tl.exp2(tl.ceil(tl.log2(absmax / FP8_MAX)))
+    quantized = tl.minimum(tl.maximum(x / scale[:, None], -FP8_MAX), FP8_MAX)
+    tl.store(
+        q_out + row[:, None] * HEAD_DIM + dim[None, :],
+        quantized,
+        mask=row_mask[:, None],
+    )
+    tl.store(scale_out + row, scale, mask=row_mask)
+    w = tl.load(raw_weights + row, mask=row_mask, other=0.0).to(tl.float32)
+    if APPLY_PRE_SCALE:
+        w = (w * pre_scale).to(tl.bfloat16).to(tl.float32)
+    w = w * weight_norm
+    w = w * scale
+    w = w * (1.0 / 64.0)
+    tl.store(weights_out + row, w, mask=row_mask)
+
+
 def write_fp8_index_keys(keys, slots, cache, *, hadamard, power_of_two):
     """Write owner-local keys independently of the cache used for query selection."""
     torch.library.wrap_triton(_write_keys)[(keys.shape[0],)](
@@ -128,16 +240,38 @@ class PreparedFP8Indexer:
         output, quantized, _, scaled_weights = self._run_observed(query, weights, pages, lengths, active, cache=cache)
         return output, quantized, scaled_weights
 
-    def _run_observed(self, query=None, weights=None, pages=None, lengths=None, active=None, *, cache=None):
+    def _run_observed(self, query=None, weights=None, pages=None, lengths=None, active=None, *, cache=None,
+                      raw_pre_scale=None):
         if self.query is None:
             rows, heads, _ = self.query_layout
-            quantized = torch.zeros(self.query_layout, dtype=torch.float8_e4m3fn, device=query.device)
-            scales = torch.zeros((rows, heads), dtype=torch.float32, device=query.device)
+            quantized = torch.empty(self.query_layout, dtype=torch.float8_e4m3fn, device=query.device)
+            scales = torch.empty((rows, heads), dtype=torch.float32, device=query.device)
             scaled_weights = torch.empty((rows, heads), dtype=torch.float32, device=query.device)
-            scaled_weights.copy_(weights)
-            scaled_weights.mul_(self.weight_normalization)
-            glm_pool.quantize_queries(query.view(-1, 128), quantized.view(-1, 128), scales.view(-1),
-                                      scaled_weights.view(-1), plan=self.query_plan)
+            if (not self.hadamard and weights.dtype == torch.bfloat16 and weights.is_contiguous()
+                    and query.is_contiguous() and query.dtype == torch.bfloat16):
+                total_rows = rows * heads
+                torch.library.wrap_triton(_quantize_queries_and_weights_kernel)[(triton.cdiv(total_rows, 4),)](
+                    query.view(-1, 128),
+                    weights.view(-1),
+                    quantized.view(-1, 128),
+                    scales.view(-1),
+                    scaled_weights.view(-1),
+                    total_rows,
+                    float(1.0 if raw_pre_scale is None else raw_pre_scale),
+                    float(self.weight_normalization),
+                    HEAD_DIM=128,
+                    FP8_MAX=448.0,
+                    BLOCK_R=4,
+                    APPLY_PRE_SCALE=raw_pre_scale is not None,
+                    num_warps=1,
+                )
+            else:
+                if raw_pre_scale is not None:
+                    weights = weights * raw_pre_scale
+                scaled_weights.copy_(weights)
+                scaled_weights.mul_(self.weight_normalization)
+                glm_pool.quantize_queries(query.view(-1, 128), quantized.view(-1, 128), scales.view(-1),
+                                          scaled_weights.view(-1), plan=self.query_plan)
             output = self.selection(quantized, scaled_weights, pages.clone() if self.copy_pages else pages,
                                     lengths, active, cache=cache)
             return output, quantized, scales, scaled_weights

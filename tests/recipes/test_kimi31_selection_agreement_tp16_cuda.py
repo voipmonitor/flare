@@ -22,15 +22,16 @@ class MergePipeline:
         from ignition.recipes.kimi31.indexer import SharedBuffers
 
         device = runtime.device
-        self.shards = ContextShards.on(rank, 16, device)
+        world = runtime.world_size
+        self.shards = ContextShards.on(rank, world, device)
         storage = SharedBuffers(buffers, device)
         self.local_ids = storage.buffer('local_ids', (rows, 2048), torch.int32)
         self.local_scores = storage.buffer('local_scores', (rows, 2048), torch.float32)
         self.active = storage.buffer('active', (rows,), torch.bool)
         self.packed = storage.buffer('packed', (rows, 2048, 2), torch.float32)
-        self.gathered = storage.buffer('gathered', (rows, 32768, 2), torch.float32)
-        self.values = storage.buffer('values', (rows, 32768), torch.float32)
-        self.ids = storage.buffer('ids', (rows, 32768), torch.int32)
+        self.gathered = storage.buffer('gathered', (rows, 2048 * world, 2), torch.float32)
+        self.values = storage.buffer('values', (rows, 2048 * world), torch.float32)
+        self.ids = storage.buffer('ids', (rows, 2048 * world), torch.int32)
         self.lengths = storage.buffer('lengths', (rows,), torch.int32)
         self.output_values = storage.buffer('output_values', (rows, 2048), torch.float32)
         self.output_ids = storage.buffer('output_ids', (rows, 2048), torch.int32)

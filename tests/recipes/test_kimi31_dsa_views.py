@@ -120,7 +120,8 @@ def test_worker_serialization_preserves_shared_prefix_identity():
     assert restored[1]._version == canonical._version
 
 
-def test_selected_attention_reuses_only_identical_record_and_constant_views(monkeypatch):
+@pytest.mark.parametrize("sequences", [1, 2])
+def test_selected_attention_reuses_only_identical_record_and_constant_views(monkeypatch, sequences):
     from ignition.recipes.kimi31 import attention
     from ignition.recipes.kimi31.dcp import RECORD_BYTES, TOPK
 
@@ -143,11 +144,14 @@ def test_selected_attention_reuses_only_identical_record_and_constant_views(monk
     monkeypatch.setattr(attention, "PreparedDSAIndexer", selection)
     monkeypatch.setattr(attention, "PreparedDenseMLA", operation)
     monkeypatch.setattr(attention, "PreparedPeerRecordGather", operation)
+    monkeypatch.setattr(attention, "PreparedPrefillRecordStage", operation)
     constants = SimpleNamespace(starts=torch.arange(3, dtype=torch.int32),
         pages=torch.arange(2 * TOPK, dtype=torch.int32).view(2, TOPK), scale=torch.ones(1))
     context = SimpleNamespace(shards=ContextShards.on(0, 16, "cpu"), attention_constants=constants)
     cache = torch.zeros((2, 128, RECORD_BYTES), dtype=torch.float8_e4m3fn)
-    prepared = attention.PreparedDSA({}, torch.zeros((5, 8)), None, cache,
+    metadata = SimpleNamespace(starts=torch.zeros(sequences, dtype=torch.int64),
+                               page_table=torch.zeros((sequences, 2), dtype=torch.int32))
+    prepared = attention.PreparedDSA({}, torch.zeros((5, 8)), metadata, cache,
         index_cache=torch.zeros((4, 64 * 132), dtype=torch.uint8), eps=1e-5, mode="prefill",
         session=None, name="attention", workspace=None, buffers={}, context=context,
         peers=torch.zeros(16, dtype=torch.int64))
@@ -162,5 +166,9 @@ def test_selected_attention_reuses_only_identical_record_and_constant_views(monk
         _assert_geometry(call.args[2], prepared.attended[start:end])
         _assert_geometry(call.args[3], constants.pages[:rows])
         _assert_geometry(call.args[5], constants.starts[:rows + 1])
-        _assert_geometry(call.args[1], part["gather"].args[4].view(-1, 1, RECORD_BYTES))
+        if sequences == 1:
+            _assert_geometry(call.args[1], part["stage"].args[6].view(-1, 1, RECORD_BYTES))
+            _assert_geometry(call.args[1], first.args[1])
+        else:
+            _assert_geometry(call.args[1], part["gather"].args[4].view(-1, 1, RECORD_BYTES))
     assert first.plan is not tail.plan

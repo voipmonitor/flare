@@ -14,8 +14,8 @@ def prepare(snapshot, plan, *, compile_forwards, kernel_cache, progress, retain_
             core_storage=None, ranks=None):
     if not plan.context_parallel:
         raise ValueError("Kimi K3.1 preparation requires context parallelism")
-    if (plan.context_parallel_size or plan.world_size) not in (8, 16):
-        raise ValueError("Kimi K3.1 TP16 supports DCP8 or DCP16")
+    if (plan.context_parallel_size or plan.world_size) not in (4, 8, 16):
+        raise ValueError("Kimi K3.1 TP16 supports DCP4, DCP8 or DCP16")
     if plan.speculation is not None and plan.speculation.method == "dflash2":
         if plan.speculation.markov_head_quantization is not None:
             raise ValueError("DFlash2 has no Markov transition head")
@@ -60,12 +60,12 @@ RECIPE = Recipe(
         16: RankCosts(state_row_bytes=35_122_432, page_bytes=2_174_976, graph_bytes=9 << 29, page_tokens=128*16),
     }), draft_bytes=7_625_920_512)}),
     stream_overlap=True, language_model_only=True,
-    hybrid_context_parallel=((16, 8),),
+    hybrid_context_parallel=((16, 4), (16, 8)),
     # The DCP-only reduction shrinks from 14 MiB to 512 KiB at C4/W8. Two staging slots with
     # 30 shards release 849,346,560 bytes; let the planner consume at most 64 pages and retain the rest.
     hybrid_context_parallel_graph_credits=MappingProxyType({(16, 8): (849_346_560, 64)}),
     benchmark_world_sizes=(16,),
-    b12x_environment=MappingProxyType({**KIMI3.b12x_environment, "B12X_PCIE_DCP_THREADS": "0"}),
+    b12x_environment=MappingProxyType({**KIMI3.b12x_environment, "B12X_PCIE_DCP_THREADS": "0", "B12X_PCIE_DCP_BLOCK_LIMIT": "0"}),
     # Graph storage is a planning allowance; actual graph memory is reported after preparation.
     ranks=MappingProxyType({16: RankCosts(state_row_bytes=33_238_272, page_bytes=2_912_256,
         graph_bytes=9 << 29, page_tokens=128 * 16)}),

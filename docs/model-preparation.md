@@ -282,6 +282,13 @@ CPU workers, independently of the number of tuning GPUs.
 preparation, whose ranks divide tuning candidates as described above. An explicit
 `--compile-workers` budget applies separately on each host.
 
+Four-row Kimi K3.1 verification on a sixteen-rank decode context group can
+select KV records directly on their owning ranks. When FlashInfer provides an
+eligible PCIe channel, preparation times this path against the measured global-ID
+selection and its physical page mapping. Both use the same rank-major ordering of
+FP32 score words and the same causal and page-table checks. Diagnostic calls that
+request the global IDs continue to materialize them.
+
 ## Exporting runtime cores
 
 Export publishes a directory entry in the shared model cache and prints its
@@ -1243,8 +1250,15 @@ stages owner-encoded latent and index history locally, distributes index-query
 rows across context ranks, and gathers final selected IDs once per layer.
 Stored FP8 records and FP32 index scales are copied byte-for-byte, including
 records written by the current chunk. Projection shapes, normalization and
-weight formats are unchanged. Smaller captured prefill capacities use direct
-peer reads and require peer KV mappings at startup.
+weight formats are unchanged. Smaller captured prefill capacities read from the owning GPUs and also require
+peer KV mappings at startup.
+
+During preparation, eligible single-request sparse prefill slices also benchmark
+publishing FP32 scores and int32 token IDs into one array per context rank.
+Each owner reads complete rows, folds candidates in rank order, and returns
+the selected IDs through the existing gather channel. A 128-query slice uses
+2 MiB of peer-visible candidate storage per rank. The prepared graph uses the
+measured winner between that exchange and gathering all candidates on every rank.
 
 At a 1,048,576-token context limit, latent history contains 576 MiB per rank
 and index history contains 132 MiB. These histories are invocation-local tensors.
@@ -1252,8 +1266,12 @@ Index scoring and selected-ID exchange finish before latent history is produced,
 so Inductor can reuse their storage when their declared dependencies allow it.
 Peer-visible staging and transport buffers remain persistent. The graph-pool
 size depends on the compiled schedule and the complete captured graph catalog.
-The 4096-token prefill path uses these histories; `--prefill-chunk-size 2048`
-uses direct peer reads instead. The compiled history-copy regression in
+With `--prefill-chunk-size 2048`, a single-request prefill processes 128
+queries at a time. Its existing 144 MiB selected-record workspace holds up to
+262,144 logical tokens. The first slice copies the visible history into this
+workspace when it fits. All slices then address those records by the indexer's
+selected token IDs. Longer histories fill the same workspace from the selected
+physical slots of each slice. The compiled history-copy regression in
 `tests/recipes/test_kimi_prefill_histories.py` checks byte preservation across
 page remapping, partial prefixes, empty rows, and repeated graph replay.
 
