@@ -288,7 +288,15 @@ winner; component names do not identify separate tuning workloads.
 
 `CollectivePreparation` relays b12x's collective tuning contributions in TP rank
 order. Each candidate executes on the whole TP group and is scored by the slowest
-rank. `ReplicaPreparation` keeps these exchanges within each serving TP replica;
+rank. When ranks hold unequal local catalogs on identical devices with matching
+scratch limits, `RecordedPreparationSession._mixed_tuning_batches` exchanges
+dependency-closed local component keys and per-candidate materialization
+fingerprints via `CollectivePreparation.gather_tuning_metadata`. Components
+present identically on every rank run first as a sharded batch across all ranks
+(restoring the singleton shard afterward); remaining rank-private or collective
+requests run in a follow-up collective or independent remainder batch where
+ranks without local remainders still join completion and failure relays.
+`ReplicaPreparation` keeps these exchanges within each serving TP replica;
 independent kernel candidates retain corresponding-rank sharding across replicas.
 Preparation-time search ends before graph handoff. With `--collective-tuning
 runtime`, the required `--collective-ladder PATH` file supplies final compiled

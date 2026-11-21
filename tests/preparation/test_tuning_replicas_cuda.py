@@ -82,7 +82,7 @@ def test_two_gpus_share_candidates_and_replay_the_selected_plan(tmp_path):
             connection.close()
 
 
-def _tp_worker(directory, member, connection, replicas=2, tensor_parallel=2, checkpoint_stage=None):
+def _tp_worker(directory, member, connection, replicas=2, tensor_parallel=2, checkpoint_stage=None, unequal=False):
     from datetime import timedelta
     import torch
     import torch.distributed as dist
@@ -123,6 +123,10 @@ def _tp_worker(directory, member, connection, replicas=2, tensor_parallel=2, che
         weight = torch.ones((512, 768), device=device, dtype=torch.bfloat16)
         projected = torch.empty((4, 512), device=device, dtype=torch.bfloat16)
         projection = UnquantizedProjection(source, weight, projected, session=session, name='projection')
+    private = None
+    if unequal and rank == tensor_parallel - 1:
+        private_output = torch.empty((4, 64), device=device, dtype=torch.bfloat16)
+        private = UnquantizedProjection(source, weight[:64], private_output, session=session, name='private')
     reduction = PreparedAllReduce(source, output, runtime=runtime, session=session,
                                   coordinator=coordinator, name='reduce')
     candidates = []
@@ -139,6 +143,9 @@ def _tp_worker(directory, member, connection, replicas=2, tensor_parallel=2, che
         assert replica == 1
     else:
         assert replica == 0
+        if private is not None:
+            private(source)
+            torch.testing.assert_close(private_output, torch.full_like(private_output, 768 * (rank + 1)))
         reduction(source)
         expected_sum = tensor_parallel * (tensor_parallel + 1) // 2
         torch.testing.assert_close(output, torch.full_like(output, expected_sum), rtol=0, atol=0)
@@ -199,13 +206,14 @@ def test_tp_replicas_preserve_uneven_rank_work_and_collectives(tmp_path):
 
 @pytest.mark.skipif(os.environ.get('FLARE_RUN_TP_CUDA_TESTS') != '1',
                     reason='requires four explicitly selected CUDA GPUs')
-def test_local_tp_ranks_measure_disjoint_candidates_and_replay_collectives(tmp_path):
+@pytest.mark.parametrize("unequal", [False, True])
+def test_local_tp_ranks_measure_disjoint_candidates_and_replay_collectives(tmp_path, unequal):
     context = multiprocessing.get_context('spawn')
     processes, connections = [], []
     try:
         for rank in range(4):
             root, peer = context.Pipe(duplex=False)
-            process = context.Process(target=_tp_worker, args=(str(tmp_path), rank, peer, 1, 4))
+            process = context.Process(target=_tp_worker, args=(str(tmp_path), rank, peer, 1, 4, None, unequal))
             process.start()
             peer.close()
             processes.append(process)
@@ -214,13 +222,15 @@ def test_local_tp_ranks_measure_disjoint_candidates_and_replay_collectives(tmp_p
             process.join(timeout=180)
         assert [process.exitcode for process in processes] == [0] * 4
         reports = [connection.recv() for connection in connections]
-        all_candidates = [item for report in reports for item in report['candidates']]
+        all_candidates = [(name, index) for report in reports for name, index in report['candidates'] if name == 'projection']
         assert len(set(all_candidates)) == len(all_candidates)
         selections = []
         for rank, report in enumerate(reports):
-            assert report['shard'] == (rank, (0, 1, 2, 3))
+            assert report['shard'] == ((0, (0,)) if unequal else (rank, (0, 1, 2, 3)))
             assert report['candidates']
-            assert all(index % 4 == rank for _, index in report['candidates'])
+            assert all(index % 4 == rank for name, index in report['candidates'] if name == 'projection')
+            private = [index for name, index in report['candidates'] if name == 'private']
+            assert bool(private) == (unequal and rank == 3)
             selected = next(item for item in report['selections'] if item['name'] == 'projection')
             assert selected['source'] == 'tuned'
             assert selected['coverage']['measured_count'] == len(all_candidates)

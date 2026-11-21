@@ -198,14 +198,8 @@ def _tuning_results(contributions):
 
 
 def _selected_plan_catalog(requests):
-    from b12x.preparation.session import _declaration_key
     from b12x.preparation.types import _CompositePlan
-
-    def declaration(plan):
-        if isinstance(plan, _CompositePlan):
-            return (plan.component_id, plan.composite_semantic_version, plan.capacity_metadata,
-                    tuple((count, declaration(child)) for count, child in plan.variants.items()))
-        return _declaration_key(plan)[:-1]
+    from .tuning_shards import portable_declaration
 
     by_name = {request.name: request for request in requests}
     identities = {}
@@ -213,7 +207,7 @@ def _selected_plan_catalog(requests):
     def identity(name):
         if name not in identities:
             request = by_name[name]
-            identities[name] = (declaration(request.plan),
+            identities[name] = (portable_declaration(request.plan),
                                 tuple(identity(dependency) for dependency in request.dependencies))
         return identities[name]
 
@@ -336,6 +330,22 @@ class CollectivePreparation:
         dist.all_reduce(matching, op=dist.ReduceOp.MIN, group=self.group)
         return bool(matching.item())
 
+    def gather_tuning_metadata(self, produce):
+        """Exchange local planning metadata or deliver a failing rank's error to every peer."""
+        error = None
+        try:
+            value = produce()
+        except Exception as exc:
+            value, error = None, exc
+        gathered = [None] * len(self.ranks)
+        dist.all_gather_object(gathered, (value, None if error is None else f"{type(error).__name__}: {error}"),
+                               group=self.group)
+        failures = [(rank, detail) for rank, (_, detail) in zip(self.ranks, gathered, strict=True)
+                    if detail is not None]
+        if failures:
+            raise RuntimeError(f"rank tuning metadata failed: {failures}") from error
+        return [item for item, _ in gathered]
+
     def share_selections(self, cache):
         """Adopt rank zero's cached kernel selections on every rank.
 
@@ -377,8 +387,9 @@ class CollectivePreparation:
     def reconcile_selections(self, requests):
         """Choose one actual configuration for matching declarations across ranks.
 
-        Unequal catalogs cannot shard candidate races. Their shared declarations
-        still need matching scratch layouts before compiled forwards are shared.
+        Unsharded remainder components in unequal catalogs (or catalogs on
+        heterogeneous hardware) still need matching scratch layouts before
+        compiled forwards are shared.
         """
         entries = _selected_plan_catalog(requests)
         local = {}

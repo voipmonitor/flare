@@ -23,6 +23,7 @@ from b12x.preparation.session import _declaration_key, _plans_of
 from b12x.preparation.types import _CompositePlan
 
 from .scratch import ScratchArena
+from .tuning_shards import component_key, local_components, materialization_key, portable_declaration
 from .host_memory import candidate_scratch_limit, cpu_workers, release_unused, tuning_limits
 
 
@@ -33,15 +34,20 @@ _REQUESTS_PER_JOB = 192
 
 
 def _local_tuning_catalog(requests):
-    def identity(plan):
-        if isinstance(plan, _CompositePlan):
-            return (plan.component_id, plan.composite_semantic_version, plan.capacity_metadata,
-                    tuple((count, identity(child)) for count, child in plan.variants.items()))
-        # Bound device ordinals differ across ranks but do not change the race.
-        return _declaration_key(plan)[:-1]
-
-    return tuple((request.name, identity(request.plan), request.dependencies)
-                 for request in requests if request.collective is None)
+    # Include the producer of each local dependency even if it is collective.
+    # Independent collectives may legitimately have different subgroups.
+    by_name = {r.name: r for r in requests}
+    needed = set()
+    pending = [r.name for r in requests if r.collective is None]
+    while pending:
+        name = pending.pop()
+        if name in needed or name not in by_name:
+            continue
+        needed.add(name)
+        pending.extend(by_name[name].dependencies)
+    return tuple((r.name, portable_declaration(r.plan), r.dependencies, getattr(r, "finalist_policy", None),
+                  None if r.collective is None else r.collective.ranks)
+                 for r in requests if r.name in needed)
 
 
 def _prepare_compiler_toolchain():
@@ -234,6 +240,61 @@ class RecordedPreparationSession(PreparationSession):
                 request.collective is not None for request in requests):
             return super().prepare(requests, progress=progress, autotune=autotune)
         return self._coordinator.prepare(self, requests, progress=progress, autotune=autotune)
+
+    def _mixed_tuning_batches(self, requests):
+        """Partition one existing job without separating collective participants or dependent plans."""
+        groups = {}
+        def describe():
+            groups.update((group[0].name, group) for group in local_components(requests))
+            return ({name: component_key(group) for name, group in groups.items()},
+                    any(request.collective is not None for request in requests), len(requests))
+
+        control = self._coordinator
+        reports = control.gather_tuning_metadata(describe)
+        catalogs = [catalog for catalog, _, _ in reports]
+        has_collectives = any(collective for _, collective, _ in reports)
+        names = sorted(name for name, key in catalogs[0].items() if all(c.get(name) == key for c in catalogs[1:]))
+        common = []
+        if names:
+            keys = control.gather_tuning_metadata(lambda: {
+                name: materialization_key(self, groups[name]) for name in names})
+            common = [name for name in names if all(k[name] == keys[0][name] for k in keys[1:])]
+        if not common:
+            return ((requests, "collective" if has_collectives else "ordinary"),)
+        shared = tuple(request for name in common for request in groups[name])
+        batches = [(shared, "sharded")]
+        if any(size != len(shared) for _, _, size in reports):
+            selected = {r.name for r in shared}
+            remainder = tuple(r for r in requests if r.name not in selected)
+            batches.append((remainder, "collective" if has_collectives else "independent"))
+        return batches
+
+    def _prepare_mixed_batch(self, requests, coordination, progress):
+        control = self._coordinator
+        if coordination == "sharded":
+            self.configure_tuning_shard(control._global_rank(), control.ranks)
+            try:
+                return control.prepare(self, requests, progress=progress, autotune=self.autotune)
+            finally:
+                self.configure_tuning_shard(0, (0,))
+        if coordination == "collective":
+            # An empty rank still relays its peers' collective readiness.
+            return control.prepare(self, requests, progress=progress, autotune=self.autotune)
+        if coordination == "independent":
+            # Relay completion and exceptions before anyone enters the next distributed job.
+            result = None
+            def prepare_local():
+                nonlocal result
+                if requests:
+                    result = self._prepare_job(requests, progress=progress, autotune=self.autotune)
+            try:
+                control.gather_tuning_metadata(prepare_local)
+            except BaseException:
+                if result is not None:
+                    result.close()
+                raise
+            return result
+        return self._prepare_job(requests, progress=progress, autotune=self.autotune)
 
     def register_finalizer(self, callback):
         self._require_collecting()
@@ -475,6 +536,7 @@ class RecordedPreparationSession(PreparationSession):
             if self._stop.is_set():
                 raise RuntimeError("full serving preparation requires enabled, uncancelled b12x tuning")
             requests = tuple(self._recorded_requests.values())
+            partial_shards = False
             if self.tuning_replica is not None:
                 import torch.distributed as dist
                 from .tuning_replicas import ReplicaPreparation
@@ -498,9 +560,19 @@ class RecordedPreparationSession(PreparationSession):
                     (torch.cuda.get_device_properties(self.device.ordinal).name, _local_tuning_catalog(requests)))
                 if self._sharded:
                     self.configure_tuning_shard(dist.get_rank(), self._coordinator.ranks)
-                elif self._coordinator.spans_hosts:
-                    self._coordinator.share_selections(self._selection_cache())
+                else:
+                    partial_shards = True
+                    if self._coordinator.spans_hosts:
+                        self._coordinator.share_selections(self._selection_cache())
             scratch_arena = self._reserve_scratch(requests)
+            if partial_shards:
+                device = self.device
+                partial_shards = self._coordinator.same_on_every_rank((
+                    getattr(device, "identity", None),
+                    getattr(device, "max_shared_memory_per_block", None),
+                    getattr(device, "max_shared_memory_per_multiprocessor", None),
+                    getattr(self, "_scratch_limit", None),
+                )) and getattr(device, "identity", None) is not None
             release_unused()
             # Compiler pools share the memory and CPUs of ranks on this host only.
             pools = 1 if self._coordinator is None else self._coordinator.local_ranks
@@ -520,22 +592,28 @@ class RecordedPreparationSession(PreparationSession):
             jobs = self._jobs(requests)
             with self._tuning_clocks():
                 for index, job in enumerate(jobs, 1):
-                    # A completed b12x job stops its live display. Each job needs its own lifecycle.
-                    with ExitStack() as display_stack:
-                        update = progress
-                        if show_progress:
-                            title = "b12x / kernel autotuning"
-                            if len(jobs) > 1:
-                                title += f" · job {index}/{len(jobs)}"
-                            display = display_stack.enter_context(PreparationDisplay(
-                                global_rank=0, console=console, transient=True, title=title))
+                    batches = self._mixed_tuning_batches(job) if partial_shards else ((job, "ordinary"),)
+                    for batch, coordination in batches:
+                        # A completed b12x job stops its live display.
+                        with ExitStack() as display_stack:
+                            update = progress
+                            if show_progress:
+                                title = "b12x / kernel autotuning"
+                                if len(jobs) > 1:
+                                    title += f" · job {index}/{len(jobs)}"
+                                if len(batches) > 1:
+                                    title += f" · {coordination}"
+                                display = display_stack.enter_context(PreparationDisplay(
+                                    global_rank=0, console=console, transient=True, title=title))
 
-                            def update(status):
-                                display.update(status)
-                                if progress is not None:
-                                    progress(status)
+                                def update(status):
+                                    display.update(status)
+                                    if progress is not None:
+                                        progress(status)
 
-                        results.append(self._prepare_job(job, progress=update, autotune=self.autotune))
+                            result = self._prepare_mixed_batch(batch, coordination, update)
+                            if result is not None:
+                                results.append(result)
             if self._stop.is_set():
                 raise RuntimeError("b12x tuning was cancelled before serving preparation completed")
             context_report = None
@@ -650,7 +728,7 @@ class RecordedPreparationSession(PreparationSession):
             finally:
                 result = None
                 results.clear()
-                requests = job = jobs = ()
+                requests = batch = batches = job = jobs = ()
                 request = None
                 callback = None
                 self._clear_tuning_owners()
