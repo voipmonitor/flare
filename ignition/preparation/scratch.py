@@ -88,8 +88,15 @@ class ScratchArena:
             from cuda.bindings import driver as cuda
 
             # PyTorch's round-robin stream pool can alias a later capture stream.
+            # Highest stream priority lets small collective kernels preempt main-stream GEMMs.
             with torch.cuda.device(self.device):
-                status, handle = cuda.cuStreamCreate(cuda.CUstream_flags.CU_STREAM_NON_BLOCKING)
+                pstatus, _least, greatest = cuda.cuCtxGetStreamPriorityRange()
+                if pstatus == cuda.CUresult.CUDA_SUCCESS and greatest < 0:
+                    status, handle = cuda.cuStreamCreateWithPriority(
+                        cuda.CUstream_flags.CU_STREAM_NON_BLOCKING, greatest
+                    )
+                else:
+                    status, handle = cuda.cuStreamCreate(cuda.CUstream_flags.CU_STREAM_NON_BLOCKING)
                 if status != cuda.CUresult.CUDA_SUCCESS:
                     raise RuntimeError(f"cannot create overlap stream: {status}")
                 stream = torch.cuda.ExternalStream(int(handle), device=self.device)

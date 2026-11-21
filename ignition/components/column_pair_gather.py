@@ -4,7 +4,7 @@
 
 import torch
 
-from ignition.components.collectives import PreparedAllGather
+from ignition.components.collectives import ConcurrentAllGather, PreparedAllGather
 
 
 def _validate_storage(first, second, **destinations):
@@ -84,14 +84,42 @@ class PreparedColumnPairGather:
         self.parts = tuple(PreparedAllGather(self.send[:end - begin], self.received[:end - begin],
             runtime=runtime, session=session, coordinator=coordinator, name=f"{name}.{index}")
             for index, (begin, end) in enumerate(self.bounds))
+        self.concurrent = None
+
+    def enable_concurrent(self, *, workspace, session, parallel_plans, send_buffer=None):
+        if len(self.parts) != 1:
+            raise ValueError("concurrent paired gather requires a single chunk")
+        self.concurrent = ConcurrentAllGather(
+            self.parts[0], workspace=workspace, session=session,
+            parallel_plans=parallel_plans, send_buffer=send_buffer)
+        return self
 
     def functional(self, *, session):
         self.rows = self.first.shape[0]
         self.chunk_rows = self.send.shape[0]
         for part in self.parts:
             part.functional(session=session)
+        if self.concurrent is not None:
+            self.concurrent.functional(session=session)
         self.first = self.second = self.output_first = self.output_second = self.send = self.received = None
         return self
+
+    def start(self, first, second, *, dependencies=()):
+        if self.concurrent is None:
+            raise ValueError("paired gather concurrency was not enabled")
+        send = torch.empty((self.rows, self.columns), dtype=torch.bfloat16, device=first.device)
+        send[:, :self.first_width].copy_(first)
+        send[:, self.first_width:].copy_(second.view(torch.bfloat16))
+        return self.concurrent.start(send, dependencies=dependencies)
+
+    def finish(self, pending, dependency):
+        received = self.concurrent.finish(pending, dependency).view(self.rows, self.world, self.columns)
+        output_first = torch.empty((self.rows, self.world * self.first_width), dtype=torch.bfloat16, device=received.device)
+        output_second = torch.empty((self.rows, self.world * self.second_width), dtype=torch.float32, device=received.device)
+        output_first.view(self.rows, self.world, self.first_width).copy_(received[:, :, :self.first_width])
+        output_second.view(self.rows, self.world, self.second_width).view(torch.bfloat16).copy_(
+            received[:, :, self.first_width:])
+        return output_first, output_second
 
     def __call__(self, first=None, second=None):
         local = self.first is None

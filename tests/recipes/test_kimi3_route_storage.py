@@ -10,7 +10,7 @@ import torch
 from ignition.recipes.kimi3 import routing
 
 
-@pytest.mark.parametrize("rows", [1, 8])
+@pytest.mark.parametrize("rows", [1, 4, 8])
 def test_route_exchange_consumes_each_invocation_and_preserves_earlier_results(rows):
     class Runtime:
         def all_gather_pair(self, down, router, latent, logits, *, plan, threads):
@@ -22,13 +22,17 @@ def test_route_exchange_consumes_each_invocation_and_preserves_earlier_results(r
             weights.copy_(values)
             ids.copy_(indices)
 
-        def all_gather_pair_kimi_topk(self, down, router, correction, latent, weights, ids, *, plan):
+        def all_gather_pair_kimi_topk(self, down, router, correction, latent, weights, ids, *, plan, out_logits=None):
             logits = router.repeat(1, 16)
+            if out_logits is not None:
+                out_logits.copy_(logits)
+                logits = out_logits
             latent.copy_(down.repeat(1, 16))
             self.kimi_topk16(logits, correction, weights, ids, plan=plan)
 
     owner = routing.PreparedRouteGather.__new__(routing.PreparedRouteGather)
     owner.rows, owner.runtime = rows, Runtime()
+    owner.combined = rows in (1, 4)
     owner.plan = owner.select_plan = SimpleNamespace()
     owner.correction_bias = torch.arange(896, dtype=torch.float32)
     owner.handle = next(routing._HANDLES)

@@ -478,6 +478,11 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
         ipc=core_storage.peer_storage, runtime=collective, coordinator=coordinator)
     forwards, signatures, metadata = {}, {}, {}
     decoder_buffers = DecoderStorage.allocate(weights.config, shard, device)
+    if (config.compile_decoder and shard.world_size == 16 and
+            getattr(collective, "algorithm", None) == "hierarchical"):
+        from .row_reductions import RowReductionTuning
+        decoder_buffers = replace(decoder_buffers, row_tuning=RowReductionTuning(
+            coordinator, device, weights.config.text["rms_norm_eps"], config.kernel_cache))
     prefill_sizes, batch_sizes = prefill_capacities(config.prefill_chunk_size), batch_capacities(config.max_active)
     if config.benchmark_selection is not None:
         prefill_sizes = config.benchmark_selection.prefill_capacities(config.prefill_chunk_size)
@@ -575,6 +580,10 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
         transient.close()
         with phase(progress, "Prepare and tune kernels") as stage, core_storage.transient():
             tuning = session.tune(show_progress=progress is not None, console=stage.console)
+
+        if decoder_buffers.row_tuning is not None and decoder_buffers.row_tuning.choices:
+            with phase(progress, "Tune four-row reduction epilogues"), core_storage.transient():
+                tuning["row_reductions"] = decoder_buffers.row_tuning.tune(session)
 
         if context is not None and getattr(context, "selection_tuning", None) is not None:
             with phase(progress, "Tune sparse candidate compositions"), core_storage.transient():

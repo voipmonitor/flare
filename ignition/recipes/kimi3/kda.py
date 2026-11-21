@@ -45,9 +45,18 @@ class PreparedKDA:
         self.input = buffer("input", columns)
         qkv, self.forget_source, gate, beta, _ = self.input.split(
             (3 * width, 128, width, heads, columns - 4 * width - 128 - heads), dim=-1)
+        self.direct_forget = (
+            tokens <= 32
+            and not isinstance(weights["forget"], torch.Tensor)
+            and self.forget_source.ndim == 2
+            and self.forget_source.stride(1) == 1
+            and self.forget_source.stride(0) % 8 == 0
+            and self.forget_source.data_ptr() % 16 == 0
+        )
+        forget_decl = self.forget_source if self.direct_forget else self.forget
         self.projections = {key: prepare_projection(x, weights[key], y, session=session,
             name=name + "." + key, workspace=workspace) for key, x, y in (
-                ("input", source, self.input), ("forget", self.forget, raw_g),
+                ("input", source, self.input), ("forget", forget_decl, raw_g),
                 ("output", gated, buffer("output", hidden)))}
         sequences = metadata.query_start_loc.numel() - 1
         conv_args = dict(x=qkv, conv_weight=weights["convolution"], query_start_loc=metadata.query_start_loc,
@@ -109,7 +118,7 @@ class PreparedKDA:
     def _finalize(self):
         self.conv_bytes = self.conv_plan.scratch_specs()[0].nbytes
         self.recurrence_bytes = sum(spec.nbytes for spec in self.plan.scratch_specs())
-        if self.recording and self.tokens <= 8:
+        if self.recording:
             try:
                 self.fused = gdn_decode.prepare_kda_fused_verify(
                     self.recurrence, self.convolution, retain_examples=False)
@@ -131,8 +140,11 @@ class PreparedKDA:
         projected = self.projections["input"](source)
         qkv, forget, gate, beta, _ = projected.split(
             (3 * width, 128, width, heads, projected.shape[1] - 4 * width - 128 - heads), dim=-1)
-        forget_input = torch.empty((tokens, 128), dtype=source.dtype, device=source.device)
-        forget_input.copy_(forget)
+        if tokens == 1 or self.direct_forget:
+            forget_input = forget
+        else:
+            forget_input = torch.empty((tokens, 128), dtype=source.dtype, device=source.device)
+            forget_input.copy_(forget)
         raw_g = self.projections["forget"](forget_input).view(tokens, heads, 128)
         gate = gate.view(tokens, heads, 128)
         if self.recording and self.fused is not None:

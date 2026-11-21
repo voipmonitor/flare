@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import torch
 import triton
 
-from ignition.components.collectives import PreparedChunkedAllGather, PreparedChunkedAllReduce
+from ignition.components.collectives import ConcurrentAllReduce, PreparedChunkedAllGather, PreparedChunkedAllReduce
 from ignition.components.embedding import PreparedShardedEmbedding
 from ignition.components.linear import UnquantizedProjection
 from ignition.components.moe import PreparedRouter, PreparedRoutedExperts, RouterScratch
@@ -75,6 +75,7 @@ def _fake_join_shared_expert(source, routed, outputs, workspace, auxiliary_strea
 class DecoderStorage:
     hidden_columns: torch.Tensor
     latent_begin: torch.Tensor
+    row_tuning: object = None
 
     @classmethod
     def allocate(cls, config, shard, device):
@@ -170,9 +171,20 @@ class PreparedLatentMoE:
         c, device = config.text, source.device
         latent = c["routed_expert_hidden_size"]
         examples = {} if examples is None else examples
+        self.pipelined = (
+            prefill_route_runtime is not None
+            and tokens == 2048
+            and workspace is not None
+            and workspace.overlap
+            and runtime is not None
+        )
+        work_tokens = tokens // 2 if self.pipelined else tokens
+        work_source = source[:work_tokens]
+
         def buffer(role, width, dtype=torch.bfloat16):
             key = "kimi.hidden_output" if role == "output" else "kimi.moe." + role
-            return declaration_tensor(examples, key, (tokens, width), dtype, device)
+            return declaration_tensor(examples, key, (work_tokens, width), dtype, device)
+
         self.hidden_columns, self.latent_begin = storage.hidden_columns, storage.latent_begin
         self.world, self.latent_width = shard.world_size, latent
         self.latent_norm, self.eps = weights["latent_norm"], c["rms_norm_eps"]
@@ -182,18 +194,22 @@ class PreparedLatentMoE:
             session=session, name=name + ".latent_up", workspace=workspace).functional(session=session)
         self.expert_reduce = PreparedChunkedAllReduce(expert_output, buffer("latent_sum", latent),
             runtime=runtime, coordinator=coordinator, session=session,
-            name=name + ".expert_reduce").functional(session=session)
+            name=name + ".expert_reduce")
+        self.row_norm = None
+        if 1 <= work_tokens <= 32 and latent == 3584 and storage.row_tuning is not None:
+            from .row_reductions import RowGeometry
+            self.row_norm = storage.row_tuning.register(self.expert_reduce, RowGeometry(latent, rows=work_tokens))
         local_logits = buffer("local_router", weights["router"].shape[0], torch.float32)
-        self.router_projection = UnquantizedProjection(source, weights["router"], local_logits,
+        self.router_projection = UnquantizedProjection(work_source, weights["router"], local_logits,
             session=session, name=name + ".router").functional(session=session)
         top_k = c["num_experts_per_token"]
         routes = RouterScratch(buffer("selected_logits", top_k, torch.float32),
             buffer("route_ids", top_k, torch.int32),
             buffer("route_weights", top_k, torch.float32).fill_(1 / top_k))
         self.route_gather = self.prefill_route_gather = None
-        if route_runtime is not None and tokens <= ROUTE_ROWS:
+        if route_runtime is not None and work_tokens <= ROUTE_ROWS:
             down_output = buffer("local_down", latent // shard.world_size)
-            self.down = prepare_projection(source, weights["latent_down_rows"], down_output,
+            self.down = prepare_projection(work_source, weights["latent_down_rows"], down_output,
                 session=session, name=name + ".latent_down_rows", workspace=workspace)
             self.route_gather = PreparedRouteGather(down_output, local_logits, weights["correction"],
                 latent_example, routes.weights, routes.ids, runtime=route_runtime, session=session,
@@ -202,12 +218,12 @@ class PreparedLatentMoE:
             logits = buffer("router", c["num_experts"], torch.float32)
             if prefill_route_runtime is not None:
                 down_output = buffer("local_down", latent // shard.world_size)
-                self.down = prepare_projection(source, weights["latent_down_rows"], down_output,
+                self.down = prepare_projection(work_source, weights["latent_down_rows"], down_output,
                     session=session, name=name + ".latent_down_rows", workspace=workspace)
                 self.prefill_route_gather = PreparedColumnPairGather(down_output, local_logits, latent_example, logits,
                     runtime=prefill_route_runtime, session=session, coordinator=coordinator,
                     name=name + ".latent_router_gather",
-                    buffers=examples.setdefault("kimi.moe.paired_columns", {})).functional(session=session)
+                    buffers=examples.setdefault("kimi.moe.paired_columns", {}))
             else:
                 self.down = prepare_projection(buffer("source", hidden // shard.world_size), weights["latent_down"],
                     buffer("down", latent), session=session, name=name + ".latent_down", workspace=workspace)
@@ -225,27 +241,54 @@ class PreparedLatentMoE:
                 name=name + ".route").functional(session=session)
         self.experts = PreparedRoutedExperts(latent_example, weights["experts"], routes.ids, routes.weights,
             expert_output, workspace=workspace, session=session, name=name + ".experts").functional(session=session)
-        self.shared = PreparedMLP(weights["shared"], source, session=session, name=name + ".shared", workspace=workspace,
+        self.shared = PreparedMLP(weights["shared"], work_source, session=session, name=name + ".shared", workspace=workspace,
             parallel_plans=(self.router_projection.plan, self.down.plan, self.experts.plan, self.up.plan)
-            if self.route_gather is not None else (), examples=examples)
+            if (self.route_gather is not None or (self.prefill_route_gather is not None and not self.pipelined)) else (),
+            examples=examples)
+        self.concurrent_expert_reduce = None
+        self.all_plans = ()
+        if self.pipelined and len(self.expert_reduce.parts) == 1:
+            self.all_plans = (
+                self.router_projection.plan,
+                self.down.plan,
+                self.router.plan,
+                self.experts.plan,
+                self.up.plan,
+                self.shared.gate_up.plan,
+                self.shared.down.plan,
+            )
+            self.prefill_route_gather.enable_concurrent(
+                workspace=workspace, session=session, parallel_plans=self.all_plans)
+            self.concurrent_expert_reduce = ConcurrentAllReduce(
+                self.expert_reduce.parts[0], workspace=workspace, session=session,
+                parallel_plans=self.all_plans)
+        else:
+            self.pipelined = False
+        self.expert_reduce.functional(session=session)
+        if self.concurrent_expert_reduce is not None:
+            self.concurrent_expert_reduce.functional(session=session)
+        if self.prefill_route_gather is not None:
+            self.prefill_route_gather.functional(session=session)
         self.concurrent_down = (ConcurrentProjectionChain((self.down,), parallel_plans=(self.router_projection.plan,),
             session=session, workspace=workspace).functional(session=session)
             if self.route_gather is not None and workspace is not None and workspace.overlap else None)
         if self.concurrent_down is None:
             self.down.functional(session=session)
 
-    def __call__(self, source):
+    def __call__(self, source, *, fuse_add=False):
         pending_down = None if self.concurrent_down is None else self.concurrent_down.start(source)
         logits = self.router_projection(source)
         if self.route_gather is not None:
             down = (self.down(source) if self.concurrent_down is None else
                     self.concurrent_down.finish(pending_down, logits))
+        elif self.prefill_route_gather is not None:
+            down = self.down(source)
         pending_shared = self.shared.start(source) if self.shared.concurrent else None
         if self.route_gather is not None:
             latent, ids, route_weights = self.route_gather(down, logits)
         else:
             if self.prefill_route_gather is not None:
-                latent, logits = self.prefill_route_gather(self.down(source), logits)
+                latent, logits = self.prefill_route_gather(down, logits)
             else:
                 router_input = torch.zeros((source.shape[0], self.router_width), dtype=torch.float32, device=source.device)
                 router_input[:, :self.local_experts].copy_(logits)
@@ -254,11 +297,17 @@ class PreparedLatentMoE:
                 latent = self.down_reduce(self.down(source.index_select(1, self.hidden_columns)))
             routes = self.router(logits)
             ids, route_weights = routes.ids, routes.weights
-        latent_sum = self.expert_reduce(self.experts(latent, ids, route_weights))
-        up_input = torch.empty((source.shape[0], self.latent_width // self.world), dtype=source.dtype, device=source.device)
-        rms_norm_columns(latent_sum, self.latent_norm, up_input, self.eps, begin=self.latent_begin)
+        partial = self.experts(latent, ids, route_weights)
+        if self.row_norm is None:
+            latent_sum = self.expert_reduce(partial)
+            up_input = torch.empty((source.shape[0], self.latent_width // self.world), dtype=source.dtype, device=source.device)
+            rms_norm_columns(latent_sum, self.latent_norm, up_input, self.eps, begin=self.latent_begin)
+        else:
+            up_input = self.row_norm.norm(partial, self.latent_norm, self.latent_begin, self.eps)
         output = self.up(up_input)
         shared = self.shared.finish(pending_shared, output) if self.shared.concurrent else self.shared(source)
+        if fuse_add:
+            return output, shared
         return output + shared
 
 
@@ -323,8 +372,27 @@ class PreparedDecoder:
                     coordinator=coordinator, session=session, name=prefix + ".moe", workspace=workspace, storage=buffers, examples=examples)
             total = declaration_tensor(examples, "kimi.hidden_output", source.shape, source.dtype, source.device)
             reduce = PreparedChunkedAllReduce(source, total, runtime=runtime, coordinator=coordinator,
-                session=session, name=prefix + ".reduce").functional(session=session)
-            self.layers.append((w, attention, mlp, reduce))
+                session=session, name=prefix + ".reduce")
+            concurrent_reduce = None
+            if (mode == "prefill" and tokens == 2048 and isinstance(mlp, PreparedLatentMoE)
+                    and mlp.pipelined and len(reduce.parts) == 2 and workspace is not None and workspace.overlap):
+                concurrent_reduce = (
+                    ConcurrentAllReduce(reduce.parts[0], workspace=workspace, session=session,
+                        parallel_plans=mlp.all_plans),
+                    ConcurrentAllReduce(reduce.parts[1], workspace=workspace, session=session,
+                        parallel_plans=mlp.all_plans),
+                )
+            reduce.functional(session=session)
+            if concurrent_reduce is not None:
+                concurrent_reduce[0].functional(session=session)
+                concurrent_reduce[1].functional(session=session)
+            self.layers.append((w, attention, mlp, reduce, concurrent_reduce))
+        self.row_mixes = None
+        if 1 <= tokens <= 32 and hidden == 7168 and buffers.row_tuning is not None:
+            from .row_reductions import hidden_row_choices
+            self.row_mixes = hidden_row_choices(buffers.row_tuning,
+                [(w, a, m, r) for w, a, m, r, _ in self.layers], config.text["attn_res_block_size"],
+                self.auxiliary_layers if self.auxiliary_stream == "attn_res" else (), self.residual_blocks, rows=tokens)
         self.scoring = None if scoring is None else scoring.prepare(source, weights.head,
             vocabulary=config.text["vocab_size"], session=session, coordinator=coordinator, name=name + ".prompt")
         self.head = PreparedVocabularyProjection(scratch.hidden, weights.head, scratch.local_logits, scratch.logits,
@@ -379,12 +447,13 @@ class PreparedDecoder:
             self.vision_state.inject(m, local)
         size, eps = c["attn_res_block_size"], c["rms_norm_eps"]
         delta, mode = self.embedding.gather(local), REPLACE
+        preceding, preceding_addend = None, None
         prefix = torch.zeros_like(delta)
         blocks = torch.zeros((self.tokens, self.residual_blocks, self.hidden), dtype=delta.dtype, device=delta.device)
         residual = ResidualStream(prefix, blocks, torch.empty_like(delta))
         auxiliary = (None if not self.auxiliary_layers else
             torch.empty((self.tokens, len(self.auxiliary_layers) * self.hidden), dtype=delta.dtype, device=delta.device))
-        for index, (w, attention, mlp, reduce) in enumerate(self.layers):
+        for index, (w, attention, mlp, reduce, concurrent_reduce) in enumerate(self.layers):
             committed, boundary = -(-index // size), index % size == 0
             captured = None
             if index in self.auxiliary_layers:
@@ -392,7 +461,8 @@ class PreparedDecoder:
                 captured = auxiliary[:, column:column + self.hidden]
             hidden = residual.mix(delta, mode, sources=committed, write=index // size if boundary else -1,
                 score=w["attention_res_score"], norm=w["input_layernorm"], eps=eps, output_eps=eps,
-                mixture=captured if self.auxiliary_stream == "attn_res" else None, output=torch.empty_like(delta))
+                mixture=captured if self.auxiliary_stream == "attn_res" else None, output=torch.empty_like(delta),
+                reduction_choice=preceding, addend=preceding_addend)
             if captured is not None and self.auxiliary_stream == "prefix":
                 captured.copy_(residual.prefix)
             if self.weights.config.layers[index] == "kda":
@@ -401,14 +471,78 @@ class PreparedDecoder:
                 attended = attention(hidden, m, shared_index=shared_index)
             else:
                 attended = attention(hidden, m)
-            attended = reduce(attended)
+            after_attention, preceding = (None, None) if self.row_mixes is None else self.row_mixes[index]
+            if concurrent_reduce is not None:
+                # 2-half (1024 + 1024) SM<->PCIe pipeline: overlaps attn_reduce(B), route_gather(A/B),
+                # expert_reduce(A/B), and mlp_reduce(A) with independent main-stream compute (strictly 1 collective in flight).
+                h = self.tokens // 2
+                cr0, cr1 = concurrent_reduce
+                att_mode = REPLACE if boundary else ADD
+                att_sources = committed + boundary
+                att_A = reduce.parts[0](attended[:h])
+                p_att_B = cr1.start(attended[h:], dependencies=(att_A,))
+                hidden_A = ResidualStream(residual.prefix[:h], residual.blocks[:h],
+                    torch.empty((h, self.hidden), dtype=attended.dtype, device=attended.device)).mix(
+                    att_A, att_mode, sources=att_sources, write=-1,
+                    score=w["mlp_res_score"], norm=w["post_attention_layernorm"], eps=eps, output_eps=eps)
+                logits_A = mlp.router_projection(hidden_A)
+                down_A = mlp.down(hidden_A)
+                shared_A = mlp.shared(hidden_A)
+                att_B = cr1.finish(p_att_B, shared_A)
+
+                p_rg_A = mlp.prefill_route_gather.start(down_A, logits_A, dependencies=(att_B,))
+                hidden_B = ResidualStream(residual.prefix[h:], residual.blocks[h:],
+                    torch.empty((h, self.hidden), dtype=attended.dtype, device=attended.device)).mix(
+                    att_B, att_mode, sources=att_sources, write=-1,
+                    score=w["mlp_res_score"], norm=w["post_attention_layernorm"], eps=eps, output_eps=eps)
+                logits_B = mlp.router_projection(hidden_B)
+                down_B = mlp.down(hidden_B)
+                latent_A, full_logits_A = mlp.prefill_route_gather.finish(p_rg_A, down_B)
+
+                p_rg_B = mlp.prefill_route_gather.start(down_B, logits_B, dependencies=(latent_A,))
+                routes_A = mlp.router(full_logits_A)
+                partial_A = mlp.experts(latent_A, routes_A.ids, routes_A.weights)
+                latent_B, full_logits_B = mlp.prefill_route_gather.finish(p_rg_B, partial_A)
+
+                p_er_A = mlp.concurrent_expert_reduce.start(partial_A, dependencies=(latent_B,))
+                routes_B = mlp.router(full_logits_B)
+                partial_B = mlp.experts(latent_B, routes_B.ids, routes_B.weights)
+                latent_sum_A = mlp.concurrent_expert_reduce.finish(p_er_A, partial_B)
+
+                p_er_B = mlp.concurrent_expert_reduce.start(partial_B, dependencies=(latent_sum_A,))
+                up_in_A = torch.empty((h, mlp.latent_width // mlp.world), dtype=attended.dtype, device=attended.device)
+                rms_norm_columns(latent_sum_A, mlp.latent_norm, up_in_A, mlp.eps, begin=mlp.latent_begin)
+                out_A = mlp.up(up_in_A) + shared_A
+                shared_B = mlp.shared(hidden_B)
+                latent_sum_B = mlp.concurrent_expert_reduce.finish(p_er_B, shared_B)
+
+                p_mr_A = cr0.start(out_A, dependencies=(latent_sum_B,))
+                up_in_B = torch.empty((h, mlp.latent_width // mlp.world), dtype=attended.dtype, device=attended.device)
+                rms_norm_columns(latent_sum_B, mlp.latent_norm, up_in_B, mlp.eps, begin=mlp.latent_begin)
+                out_B = mlp.up(up_in_B) + shared_B
+                delta_A = cr0.finish(p_mr_A, out_B)
+
+                delta = torch.empty((self.tokens, self.hidden), dtype=attended.dtype, device=attended.device)
+                delta[:h].copy_(delta_A)
+                reduce.parts[1](out_B, delta[h:], dependencies=(delta_A,))
+                preceding_addend = None
+                mode = ADD
+                continue
+            if after_attention is None:
+                attended = reduce(attended)
             hidden = residual.mix(attended, REPLACE if boundary else ADD, sources=committed + boundary, write=-1,
                 score=w["mlp_res_score"], norm=w["post_attention_layernorm"], eps=eps, output_eps=eps,
-                output=torch.empty_like(delta))
-            delta, mode = reduce(mlp(hidden)), ADD
+                output=torch.empty_like(delta), reduction_choice=after_attention)
+            if preceding is not None and preceding.fused and isinstance(mlp, PreparedLatentMoE):
+                delta, preceding_addend = mlp(hidden, fuse_add=True)
+            else:
+                delta, preceding_addend = mlp(hidden), None
+            mode = ADD
+            if preceding is None:
+                delta = reduce(delta)
         hidden = residual.mix(delta, mode, sources=-(-len(self.layers) // size), write=-1,
             score=self.weights.output_res_score, norm=self.weights.norm, eps=eps, output_eps=eps,
-            output=torch.empty_like(delta))
+            output=torch.empty_like(delta), reduction_choice=preceding, addend=preceding_addend)
         if self.scoring is not None:
             self.scoring(hidden)
         sampled = hidden[m.sample_indices]

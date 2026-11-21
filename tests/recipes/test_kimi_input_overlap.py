@@ -63,6 +63,7 @@ def test_projection_and_shared_forks_preserve_outputs_and_balance_joins(
     source = torch.empty(rows, 4)
     logits = torch.empty(rows, 4)
     prepared = decoder.PreparedLatentMoE.__new__(decoder.PreparedLatentMoE)
+    prepared.row_norm = None
     prepared.world, prepared.latent_width = 1, 4
     prepared.prefill_route_gather = None
     prepared.source = torch.empty_like(source)

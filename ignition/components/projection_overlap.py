@@ -210,7 +210,7 @@ class ConcurrentProjectionChain:
 
     def start(self, source, *, encoded_bases=None):
         if self.projections is None:
-            outputs = [torch.empty_strided(shape, stride, dtype=dtype, device=source.device).zero_()
+            outputs = [torch.empty_strided(shape, stride, dtype=dtype, device=source.device)
                        for shape, stride, dtype in self.output_layouts]
             workspace = torch.empty(self.workspace_nbytes, dtype=torch.uint8, device=source.device)
             if self.encoded_layouts is not None:

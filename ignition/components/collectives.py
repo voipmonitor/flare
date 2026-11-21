@@ -69,6 +69,102 @@ def _fake_all_reduce(source, output, handle):
     pass
 
 
+@torch.library.custom_op("flare::pcie_all_reduce_dep", mutates_args=("output",))
+def _all_reduce_dep(source: torch.Tensor, output: torch.Tensor, dependencies: list[torch.Tensor], handle: int) -> None:
+    owner = _OWNERS[handle]
+    from ignition.preparation.startup_tuning import record_consumer
+    record_consumer(owner)
+    owner.runtime.all_reduce(source, out=output, plan=owner.plan)
+
+
+@_all_reduce_dep.register_fake
+def _fake_all_reduce_dep(source, output, dependencies, handle):
+    pass
+
+
+@torch.library.custom_op("flare::start_all_reduce", mutates_args=("output",))
+def _start_all_reduce(source: torch.Tensor, output: torch.Tensor, dependencies: list[torch.Tensor],
+                      handle: int, stream: int) -> None:
+    owner = _OWNERS[handle]
+    if owner.concurrent_input is not None:
+        send = owner.concurrent_input
+        send.copy_(source)
+    else:
+        send = source
+    auxiliary = torch.cuda.ExternalStream(stream, device=source.device)
+    auxiliary.wait_stream(torch.cuda.current_stream(source.device))
+    with torch.cuda.stream(auxiliary):
+        from ignition.preparation.startup_tuning import record_consumer
+        record_consumer(owner)
+        owner.runtime.all_reduce(send, out=output, plan=owner.plan)
+
+
+@_start_all_reduce.register_fake
+def _fake_start_all_reduce(source, output, dependencies, handle, stream):
+    pass
+
+
+@torch.library.custom_op("flare::join_all_reduce", mutates_args=("output",))
+def _join_all_reduce(source: torch.Tensor, output: torch.Tensor, dependencies: list[torch.Tensor],
+                     dependency: torch.Tensor, stream: int) -> None:
+    torch.cuda.current_stream(source.device).wait_stream(torch.cuda.ExternalStream(stream, device=source.device))
+
+
+@_join_all_reduce.register_fake
+def _fake_join_all_reduce(source, output, dependencies, dependency, stream):
+    pass
+
+
+@dataclass(frozen=True)
+class PendingAllReduce:
+    source: torch.Tensor
+    output: torch.Tensor
+    dependencies: list[torch.Tensor]
+
+
+class ConcurrentAllReduce:
+    """Overlap a prepared PCIe all-reduce with local compute on an auxiliary stream."""
+
+    def __init__(self, reduce, *, workspace, session, parallel_plans, send_buffer=None):
+        from ignition.preparation.scratch import ScratchArena
+
+        plans = tuple(parallel_plans)
+        if reduce.single or _roce(reduce.runtime):
+            raise ValueError("concurrent all-reduce requires a prepared PCIe channel")
+        if not isinstance(workspace, ScratchArena) or not workspace.overlap or not plans:
+            raise ValueError("concurrent all-reduce requires an overlap arena and local plans")
+        self.reduce = reduce
+        self.reduce.concurrent_input = send_buffer
+        self.stream = workspace.auxiliary_stream
+        self.stream_handle = self.stream.cuda_stream
+        for plan in plans:
+            workspace.register_parallel(reduce.plan, plan)
+        register_finalizer(session, self.validate_scratch)
+
+    def validate_scratch(self):
+        if self.reduce.plan.memory_requirements().scratch_nbytes:
+            raise ValueError("concurrent all-reduce requires a plan without caller scratch")
+
+    def functional(self, *, session):
+        self.reduce.functional(session=session)
+        return self
+
+    def start(self, source, output=None, *, dependencies=()):
+        if output is None:
+            output = self.reduce.output
+        if output is None:
+            shape, stride, dtype = self.reduce.output_layout
+            output = torch.empty_strided(shape, stride, dtype=dtype, device=source.device)
+        send = source.clone() if self.reduce.concurrent_input is None else source
+        deps = list(dependencies)
+        _start_all_reduce(send, output, deps, self.reduce.handle, self.stream_handle)
+        return PendingAllReduce(send, output, deps)
+
+    def finish(self, pending, dependency):
+        _join_all_reduce(pending.source, pending.output, pending.dependencies, dependency, self.stream_handle)
+        return pending.output
+
+
 class PreparedAllReduce:
     """One fixed-shape reduction through an established b12x PCIe runtime.
 
@@ -182,7 +278,7 @@ class PreparedAllReduce:
             self.output = None
         return self
 
-    def __call__(self, source, output=None):
+    def __call__(self, source, output=None, *, dependencies=()):
         if output is None:
             output = self.output
         if output is None:
@@ -190,6 +286,8 @@ class PreparedAllReduce:
             output = torch.empty_strided(shape, stride, dtype=dtype, device=source.device)
         if self.single:
             output.copy_(source)
+        elif dependencies:
+            _all_reduce_dep(source, output, list(dependencies), self.handle)
         else:
             _all_reduce(source, output, self.handle)
         return output
@@ -487,10 +585,19 @@ def _fake_all_gather(source, output, dependencies, handle):
 @torch.library.custom_op("flare::start_all_gather", mutates_args=("output",))
 def _start_all_gather(source: torch.Tensor, output: torch.Tensor, dependencies: list[torch.Tensor],
                       handle: int, stream: int) -> None:
+    # A compiled forward may reuse the input's storage on its main stream as
+    # soon as this call returns. Stage it before recording the auxiliary wait
+    # unless the caller already supplies a graph-owned unaliased send tensor.
+    owner = _OWNERS[handle]
+    if owner.concurrent_input is not None:
+        send = owner.concurrent_input
+        send.copy_(source)
+    else:
+        send = source
     auxiliary = torch.cuda.ExternalStream(stream, device=source.device)
     auxiliary.wait_stream(torch.cuda.current_stream(source.device))
     with torch.cuda.stream(auxiliary):
-        _gather_columns(source, output, handle)
+        _gather_columns(send, output, handle)
 
 
 @_start_all_gather.register_fake
@@ -524,7 +631,7 @@ class ConcurrentAllGather:
     dependency, keeping communication serialized through compilation.
     """
 
-    def __init__(self, gather, *, workspace, session, parallel_plans):
+    def __init__(self, gather, *, workspace, session, parallel_plans, send_buffer=None):
         from ignition.preparation.scratch import ScratchArena
 
         plans = tuple(parallel_plans)
@@ -533,6 +640,9 @@ class ConcurrentAllGather:
         if not isinstance(workspace, ScratchArena) or not workspace.overlap or not plans:
             raise ValueError("concurrent column gather requires an overlap arena and local plans")
         self.gather = gather
+        # The channel retains the send buffer for all captured replays.
+        # Operations sharing it join before the next write.
+        self.gather.concurrent_input = send_buffer
         self.stream = workspace.auxiliary_stream
         self.stream_handle = self.stream.cuda_stream
         for plan in plans:
@@ -985,7 +1095,7 @@ class PreparedLseReduceScatter:
     def __call__(self, partial, lse):
         output = self.output
         if output is None:
-            output = torch.empty_strided(self.output_layout[0], self.output_layout[1], dtype=self.output_layout[2], device=partial.device).zero_()
+            output = torch.empty_strided(self.output_layout[0], self.output_layout[1], dtype=self.output_layout[2], device=partial.device)
         if self.roce:
             from .head_exchange import merge, pack
 

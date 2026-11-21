@@ -39,11 +39,15 @@ def situ(gate_up, out):
 
 @triton.jit
 def _rms_norm(Source, Weight, Output, Begin, source_stride, output_stride, eps, WIDTH: tl.constexpr,
-              OUTPUT_WIDTH: tl.constexpr, OFFSET: tl.constexpr, BLOCK: tl.constexpr):
+              OUTPUT_WIDTH: tl.constexpr, OFFSET: tl.constexpr, BLOCK: tl.constexpr,
+              SOURCE_CG: tl.constexpr = False):
     row = tl.program_id(0).to(tl.int64)
     columns = tl.arange(0, BLOCK)
     valid = columns < WIDTH
-    value = tl.load(Source + row * source_stride + columns, valid, other=0.).to(tl.float32)
+    if SOURCE_CG:
+        value = tl.load(Source + row * source_stride + columns, valid, other=0., cache_modifier=".cg").to(tl.float32)
+    else:
+        value = tl.load(Source + row * source_stride + columns, valid, other=0.).to(tl.float32)
     normalized = (value * tl.rsqrt(tl.sum(value * value) / WIDTH + eps)).to(Output.dtype.element_ty)
     begin = tl.load(Begin) if OFFSET else 0
     keep = (columns >= begin) & (columns < begin + OUTPUT_WIDTH)
@@ -134,8 +138,78 @@ def _unpack_norm_kv_and_tail(Gathered, Weight, LatentOut, g_row_stride, g_rank_s
         tl.store(LatentOut + row * lat_stride + tail_index, tail_value, mask=tail_valid)
 
 
+@triton.jit
+def _unpack_norm_qkv(
+    Gathered,
+    QWeight,
+    KVWeight,
+    QOut,
+    LatentOut,
+    g_row_stride,
+    g_rank_stride,
+    q_out_stride,
+    lat_stride,
+    eps,
+    LOCAL_Q: tl.constexpr,
+    LOCAL_KV: tl.constexpr,
+    Q_NORM_WIDTH: tl.constexpr,
+    KV_NORM_WIDTH: tl.constexpr,
+    TAIL_WIDTH: tl.constexpr,
+    Q_BLOCK: tl.constexpr,
+    KV_BLOCK: tl.constexpr,
+):
+    row = tl.program_id(0).to(tl.int64)
+    branch = tl.program_id(1)
+    if branch == 0:
+        q_cols = tl.arange(0, Q_BLOCK)
+        q_valid = q_cols < Q_NORM_WIDTH
+        q_rank = q_cols // LOCAL_Q
+        q_offset = q_cols % LOCAL_Q
+        q_val = tl.load(
+            Gathered + row * g_row_stride + q_rank * g_rank_stride + q_offset,
+            mask=q_valid,
+            other=0.0,
+        ).to(tl.float32)
+        q_norm = (q_val * tl.rsqrt(tl.sum(q_val * q_val) / Q_NORM_WIDTH + eps)).to(QOut.dtype.element_ty)
+        q_w = tl.load(QWeight + q_cols, mask=q_valid, other=0.0).to(tl.float32)
+        tl.store(
+            QOut + row * q_out_stride + q_cols,
+            (q_w * q_norm.to(tl.float32)).to(QOut.dtype.element_ty),
+            mask=q_valid,
+        )
+    else:
+        kv_cols = tl.arange(0, KV_BLOCK)
+        kv_valid = kv_cols < KV_NORM_WIDTH
+        kv_rank = kv_cols // LOCAL_KV
+        kv_offset = LOCAL_Q + (kv_cols % LOCAL_KV)
+        kv_val = tl.load(
+            Gathered + row * g_row_stride + kv_rank * g_rank_stride + kv_offset,
+            mask=kv_valid,
+            other=0.0,
+        ).to(tl.float32)
+        kv_norm = (kv_val * tl.rsqrt(tl.sum(kv_val * kv_val) / KV_NORM_WIDTH + eps)).to(LatentOut.dtype.element_ty)
+        kv_w = tl.load(KVWeight + kv_cols, mask=kv_valid, other=0.0).to(tl.float32)
+        tl.store(
+            LatentOut + row * lat_stride + kv_cols,
+            (kv_w * kv_norm.to(tl.float32)).to(LatentOut.dtype.element_ty),
+            mask=kv_valid,
+        )
+        if TAIL_WIDTH > 0:
+            tail_cols = tl.arange(0, 64)
+            tail_valid = tail_cols < TAIL_WIDTH
+            tail_index = KV_NORM_WIDTH + tail_cols
+            tail_rank = tail_index // LOCAL_KV
+            tail_offset = LOCAL_Q + (tail_index % LOCAL_KV)
+            tail_value = tl.load(
+                Gathered + row * g_row_stride + tail_rank * g_rank_stride + tail_offset,
+                mask=tail_valid,
+                other=0.0,
+            )
+            tl.store(LatentOut + row * lat_stride + tail_index, tail_value, mask=tail_valid)
+
+
 def unpack_and_rms_norm_qkv(gathered, local_q: int, local_kv: int, q_weight, kv_weight, q_norm_out, latent_out, eps: float):
-    """Unpack rank-interleaved latents and apply canonical Q/KV RMSNorm and tail copy."""
+    """Unpack rank-interleaved latents and apply canonical Q/KV RMSNorm and tail copy in one launch."""
     rows, world, width = gathered.shape
     q_width = q_norm_out.shape[1]
     kv_norm_width = kv_weight.shape[0]
@@ -147,9 +221,10 @@ def unpack_and_rms_norm_qkv(gathered, local_q: int, local_kv: int, q_weight, kv_
         raise ValueError("fused latent unpacking requires complete rank shards, contiguous rows and at most 64 tail columns")
     q_block = triton.next_power_of_2(q_width)
     kv_block = triton.next_power_of_2(kv_norm_width)
-    torch.library.wrap_triton(_unpack_norm_q)[(rows,)](
-        gathered, q_weight, q_norm_out, gathered.stride(0), gathered.stride(1), q_norm_out.stride(0), float(eps),
-        local_q, q_width, q_block, num_warps=4 if q_block <= 2048 else 8)
-    torch.library.wrap_triton(_unpack_norm_kv_and_tail)[(rows,)](
-        gathered, kv_weight, latent_out, gathered.stride(0), gathered.stride(1), latent_out.stride(0), float(eps),
-        local_q, local_kv, kv_norm_width, tail_width, kv_block, num_warps=4 if kv_block <= 2048 else 8)
+    warps = 4 if max(q_block, kv_block) <= 2048 else 8
+    torch.library.wrap_triton(_unpack_norm_qkv)[(rows, 2)](
+        gathered, q_weight, kv_weight, q_norm_out, latent_out,
+        gathered.stride(0), gathered.stride(1), q_norm_out.stride(0), latent_out.stride(0),
+        float(eps), local_q, local_kv, q_width, kv_norm_width, tail_width, q_block, kv_block,
+        num_warps=warps,
+    )

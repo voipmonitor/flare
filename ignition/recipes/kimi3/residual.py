@@ -14,23 +14,31 @@ import triton
 import triton.language as tl
 
 KEEP, ADD, REPLACE = 0, 1, 2
-# Source tile and warps by committed block count, measured for one decode row.
-TILES = ((2, 4), (2, 4), (4, 8), (4, 8), (8, 8), (8, 8), (8, 8), (8, 8), (4, 8))
+# Source tile and warps by committed block count, measured for decode and prefill.
+TILES = ((2, 4), (2, 4), (4, 8), (4, 8), (4, 8), (4, 8), (4, 8), (4, 8), (4, 8))
 
 
 @triton.jit
 def _mix(Prefix, Delta, Blocks, Score, Norm, Output, Mixture, prefix_stride, delta_stride, block_row_stride,
          block_stride, output_stride, mixture_stride, eps, output_eps, HIDDEN: tl.constexpr, SOURCES: tl.constexpr,
-         WRITE: tl.constexpr, DELTA: tl.constexpr, MIXTURE: tl.constexpr, BLOCK: tl.constexpr, TILE: tl.constexpr):
+         WRITE: tl.constexpr, DELTA: tl.constexpr, MIXTURE: tl.constexpr, BLOCK: tl.constexpr, TILE: tl.constexpr,
+         DELTA_CG: tl.constexpr = False):
     row = tl.program_id(0).to(tl.int64)
     columns = tl.arange(0, BLOCK)
     valid = columns < HIDDEN
-    current = tl.load(Prefix + row * prefix_stride + columns, valid, other=0.)
-    if DELTA == 1:
-        delta = tl.load(Delta + row * delta_stride + columns, valid, other=0.)
-        current = (current.to(tl.float32) + delta.to(tl.float32)).to(Prefix.dtype.element_ty)
-    elif DELTA == 2:
-        current = tl.load(Delta + row * delta_stride + columns, valid, other=0.)
+    if DELTA == 2:
+        if DELTA_CG:
+            current = tl.load(Delta + row * delta_stride + columns, valid, other=0., cache_modifier=".cg")
+        else:
+            current = tl.load(Delta + row * delta_stride + columns, valid, other=0.)
+    else:
+        current = tl.load(Prefix + row * prefix_stride + columns, valid, other=0.)
+        if DELTA == 1:
+            if DELTA_CG:
+                delta = tl.load(Delta + row * delta_stride + columns, valid, other=0., cache_modifier=".cg")
+            else:
+                delta = tl.load(Delta + row * delta_stride + columns, valid, other=0.)
+            current = (current.to(tl.float32) + delta.to(tl.float32)).to(Prefix.dtype.element_ty)
     if DELTA != 0:
         tl.store(Prefix + row * prefix_stride + columns, current, valid)
     if WRITE >= 0:
@@ -38,8 +46,6 @@ def _mix(Prefix, Delta, Blocks, Score, Norm, Output, Mixture, prefix_stride, del
     if SOURCES == 0:
         mixed = current.to(tl.float32)
     else:
-        # The running sum is the last source; it is reread after its store is visible to the whole program.
-        tl.debug_barrier()
         weight = tl.load(Score + columns, valid, other=0.)
         maximum = tl.full((), float("-inf"), tl.float32)
         total = tl.zeros((), tl.float32)
@@ -47,9 +53,14 @@ def _mix(Prefix, Delta, Blocks, Score, Norm, Output, Mixture, prefix_stride, del
         for tile in tl.static_range((SOURCES + TILE) // TILE):
             sources = tile * TILE + tl.arange(0, TILE)
             present = sources <= SOURCES
-            pointers = tl.where((sources == SOURCES)[:, None], Prefix + row * prefix_stride + columns[None, :],
-                                Blocks + row * block_row_stride + sources[:, None] * block_stride + columns[None, :])
-            values = tl.load(pointers, present[:, None] & valid[None, :], other=0.).to(tl.float32)
+            block_present = sources < SOURCES
+            values = tl.load(
+                Blocks + row * block_row_stride + sources[:, None] * block_stride + columns[None, :],
+                block_present[:, None] & valid[None, :],
+                other=0.,
+            ).to(tl.float32)
+            if tile == (SOURCES + TILE) // TILE - 1:
+                values = tl.where((sources == SOURCES)[:, None], current.to(tl.float32)[None, :], values)
             scale = tl.rsqrt(tl.sum(values * values, axis=1) / HIDDEN + eps)
             scores = tl.where(present, tl.sum(values * weight[None, :], axis=1) * scale, float("-inf"))
             peak = tl.maximum(maximum, tl.max(scores, axis=0))
@@ -82,7 +93,7 @@ class ResidualStream:
             raise ValueError("residual stream tensors must be BF16 with contiguous rows")
         self.prefix, self.blocks, self.output = prefix, blocks, output
 
-    def mix(self, delta, mode, *, sources, write, score, norm, eps, output_eps, mixture=None, output=None):
+    def mix(self, delta, mode, *, sources, write, score, norm, eps, output_eps, mixture=None, output=None, reduction_choice=None, addend=None):
         """Apply ``mode`` with ``delta``, commit block ``write`` (or none for -1), and normalize the mixture
         of the first ``sources`` committed blocks and the running sum into ``output`` (by default the stream's);
         ``mixture`` also receives it unnormalized."""
@@ -90,11 +101,22 @@ class ResidualStream:
             raise ValueError("residual mixing reads only committed blocks and never overwrites one")
         if delta is not None and (delta.shape != self.prefix.shape or delta.stride(-1) != 1):
             raise ValueError("residual delta must match the running sum")
+        if addend is not None and (addend.shape != self.prefix.shape or addend.stride(-1) != 1):
+            raise ValueError("residual addend must match the running sum")
         if mixture is not None and (mixture.shape != self.prefix.shape or mixture.stride(-1) != 1):
             raise ValueError("residual mixture output must match the running sum")
         output = self.output if output is None else output
         if output.shape != self.prefix.shape or output.stride(-1) != 1 or output.dtype != torch.bfloat16:
             raise ValueError("residual output must be BF16 rows matching the running sum")
+        if reduction_choice is not None:
+            if reduction_choice.fused:
+                return reduction_choice.fused_mix(self, delta, addend=addend, score=score, norm=norm, eps=eps, output_eps=output_eps,
+                                                  mixture=mixture, output=output)
+            if addend is not None:
+                delta = delta + addend
+            delta = reduction_choice.sum(delta)
+        elif addend is not None:
+            delta = delta + addend
         rows, hidden = self.prefix.shape
         delta = self.prefix if delta is None else delta
         tile, warps = TILES[min(sources, len(TILES) - 1)]
