@@ -53,3 +53,31 @@ def test_collective_transport_metadata_leaves_cuda_resources_on_the_owning_rank(
     finally:
         torch.cuda.synchronize(values.device)
         transport.close()
+
+
+def test_forward_metadata_keeps_transport_geometry_and_excludes_driver_stream():
+    from cuda.bindings import driver
+    from b12x.comm.pcie._island_copy import PacketTransport
+    from b12x.comm.pcie.pcie_allreduce import PCIeAllReduce
+    from b12x.comm.pcie.pcie_island_rs import PCIeIslandRSAllReduce
+    from ignition.components.collectives import PreparedAllReduce
+
+    # A previously prepared DMA candidate leaves its driver stream on the owning rank.
+    # The compiler worker needs the handle of Flare's bound operation and its TP geometry.
+    transport = object.__new__(PacketTransport)
+    transport._handle = driver.CUstream(17)
+    island = object.__new__(PCIeIslandRSAllReduce)
+    island._packet_transport = transport
+    runtime = object.__new__(PCIeAllReduce)
+    runtime._island_rs = island
+    runtime.world_size = 16
+    operation = object.__new__(PreparedAllReduce)
+    operation.runtime, operation.handle = runtime, 71
+
+    worker = forward_metadata.loads(forward_metadata.dumps(operation))
+    assert worker.handle == 71
+    assert worker.runtime.world_size == 16
+    stream = worker.runtime._island_rs._packet_transport._handle
+    assert isinstance(stream, _Unavailable)
+    with pytest.raises(RuntimeError, match=r"cuda\.bindings\.driver\.CUstream"):
+        stream.value
