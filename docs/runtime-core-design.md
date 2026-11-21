@@ -697,8 +697,9 @@ identical bytes per page, byte offset within the plane, and mapped length. Their
 row positions and logical page coverage stay the same. It then reorders whole chunks inside an
 uninterrupted interval of one snapshot row, merging adjacent spans of the same
 KV plane into one backing allocation and one alias mapping. Only complete chunks
-wholly contained in one row are reordered or merged; spans crossing row boundaries
-and partial mappings keep their row positions and lengths.
+wholly contained in one row are reordered or merged. A plane span whose prefix
+backs the final snapshot uses two physical handles. The snapshot maps the whole
+first handle and the remaining bytes have only their KV mapping.
 
 These transformations preserve every plane's byte coverage, physical byte
 count, snapshot address and stride, and the exact set of KV pages conflicting
@@ -707,13 +708,47 @@ permissions remain allocation-specific. The layout uses ordinary CUDA VMM
 allocations at the recorded core addresses and requires no core re-export,
 additional framebuffer reserve, allocation retry, or reduced cache capacity.
 
+On a single Linux host, before allocating backing, Helios counts one physical handle for each fixed
+allocation or cache chunk and one mapping for each actual device reader of each
+virtual address. If the estimated total reaches the NVIDIA GPU kernel Resource
+Manager (RM) automatic handle range (`RS_UNIQUE_HANDLE_RANGE`, 524,288 handles
+shared across the host's Linux UVM client), the planner
+packs the longest contiguous span available in a single plane at each snapshot
+address, stopping once the aggregate estimate drops below the limit. A row can
+extend toward high page IDs already covered by preceding rows. Each snapshot
+retains its admissible low KV prefix, and each prefix of snapshot slots excludes
+a subset of its previous pages. Individually retained snapshots can exclude
+additional pages when active KV is fragmented.
+
+If those spans still exceed the mapping range, the planner groups KV pages in
+successively wider bands derived from CUDA allocation granularity and bytes per
+page, stopping as soon as the aggregate fits. It measures each geometry's handle
+count before creating any GPU backing and keeps reductions in that count. If
+even whole-plane grouping remains at or above the limit, startup fails
+explicitly with the handle shortfall before creating GPU allocations. The
+scheduler receives the actual intersection of each snapshot with its KV planes
+as an enclosing page range. Wider bands can exclude more pages while a snapshot
+is retained. Both policies keep the planned number of KV pages, snapshot slots
+and physical bytes. The RM estimate covers the model's VMM objects; other driver
+objects share the same 524,288-handle range, so deployments near the limit
+(such as the 518,232-handle 3,103-page DCP16 layout, leaving 6,056 handles /
+1.2%) rely on that remaining headroom.
+
+Multi-host cache agreement exchanges page and row counts. Each host uses the
+same canonical layout and includes its snapshot conflict ranges in the
+scheduler contract hash. Other operating systems also retain canonical
+placement.
+
 Native startup and C1/C4 generation with 32K prefill are qualified for Kimi K3.1
-Pro TP16 cores using DCP8 and DCP16 on sixteen RTX PRO 6000 Blackwell GPUs with
-NVIDIA driver 615.71.10, with default memory sizing and explicit reserves of
-zero and 1 GiB. KV and snapshot capacities match the physical-memory plan in
-all six configurations. CPU layout tests compare every row's exact conflict
-set and complete byte coverage; GPU tests preserve snapshot bytes while released
-KV pages are overwritten. These checks do not constitute model-quality evaluation.
+Pro TP16 cores using DCP8 and DCP16 on one Linux configuration (sixteen RTX PRO
+6000 Blackwell GPUs with NVIDIA driver 615.71.10), with default memory sizing
+and explicit reserves of zero and 1 GiB. Prefix-compacted placements are
+qualified on that configuration; wide-group compaction is verified by CPU unit
+tests only and has not been mapped through a GPU driver. KV and snapshot
+capacities match the physical-memory plan in all six configurations. CPU layout
+tests compare every row's exact conflict set and complete byte coverage; GPU
+tests preserve snapshot bytes while released KV pages are overwritten. These
+checks do not constitute model-quality evaluation.
 
 Immutable snapshot capacity is bounded by borrowable KV backing and the prepared
 virtual extent. At load, CUDA virtual mappings expose the same allocation chunks
