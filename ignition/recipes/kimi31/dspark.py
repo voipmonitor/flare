@@ -281,8 +281,11 @@ class DraftAttention(torch.nn.Module):
         self.current_attention = PreparedDenseMLA(self.gathered, self.block, self.current, self.current_pages,
             self.current_lengths, self.starts, caps=current_caps, scale=scale, session=session,
             name=name + ".block", workspace=workspace, lse=self.current_lse).functional(session=session, cache=None)
+        lse_threads = 128 if self.shards.world == 8 else 512
+        lse_blocks = 64 if self.shards.world == 8 else 8
         self.combine = PreparedLseReduceScatter(self.history, self.history_lse, self.projected.attended,
-            runtime=context.heads, session=session, coordinator=coordinator, name=name + ".combine", threads=512, block_limit=8).functional(session=session)
+            runtime=context.heads, session=session, coordinator=coordinator, name=name + ".combine",
+            threads=lse_threads, block_limit=lse_blocks).functional(session=session)
         self.reduce = PreparedAllReduce(scratch.projection["output"][:tokens], scratch.output,
             runtime=runtime, session=session, coordinator=coordinator, name=name + ".reduce").functional(session=session)
         self.projected.functional(session=session)

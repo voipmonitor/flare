@@ -205,6 +205,483 @@ class PreparedRowScaledFP8MarkovProjection:
 
 
 @triton.jit
+def _resolve_previous(
+    Pending,
+    Tokens,
+    LseMax,
+    Bad,
+    PreviousMax,
+    PreviousArg,
+    Slots,
+    Generations,
+    LiveRows,
+    Generation,
+    Status,
+    block,
+    row,
+    V: tl.constexpr,
+    DEPTH: tl.constexpr,
+    STEP: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    PAD: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BATCH: tl.constexpr,
+    RUNNING: tl.constexpr,
+):
+    if STEP == 0:
+        previous = tl.load(Pending + row)
+    else:
+        previous = _previous(PreviousMax, PreviousArg, row, BLOCKS, PAD)
+        prior_block = tl.arange(0, PAD)
+        previous_maxima = tl.load(
+            LseMax + (row * DEPTH + STEP - 1) * BLOCKS + prior_block, prior_block < BLOCKS, other=-float("inf")
+        )
+        previous_bad = tl.load(Bad + (row * DEPTH + STEP - 1) * BLOCKS + prior_block, prior_block < BLOCKS, other=0)
+        previous_maximum = tl.max(previous_maxima, 0)
+        previous_valid = (
+            _row_live(Slots, Generations, LiveRows, Generation, Status, row, CAPACITY, BATCH, RUNNING)
+            & (tl.sum(previous_bad.to(tl.int32), 0) == 0)
+            & (previous_maximum == previous_maximum)
+            & (tl.abs(previous_maximum) < float("inf"))
+        )
+        previous = tl.where(previous_valid, previous, 0)
+        if block == 0:
+            tl.store(Tokens + row * DEPTH + STEP - 1, previous)
+    return tl.minimum(tl.maximum(previous, 0), V - 1)
+
+
+@triton.jit
+def _finish_markov_row(
+    row,
+    previous,
+    bias,
+    Base,
+    Tokens,
+    Scores,
+    LseMax,
+    LseSum,
+    Bad,
+    Maximum,
+    Arg,
+    Seeds,
+    Offsets,
+    Histogram,
+    Slots,
+    Params,
+    Grammar,
+    GrammarEnabled,
+    base_row_stride,
+    base_step_stride,
+    hist_stride,
+    mask_stride,
+    block,
+    token,
+    inside,
+    V: tl.constexpr,
+    DEPTH: tl.constexpr,
+    STEP: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
+    score = (
+        tl.load(Base + row * base_row_stride + STEP * base_step_stride + token, inside, other=0.0).to(tl.float32) + bias
+    )
+    safe = tl.minimum(tl.maximum(tl.load(Slots + row).to(tl.int64), 0), CAPACITY - 1)
+    temperature = tl.load(Params + safe * 6)
+    repetition = tl.load(Params + safe * 6 + 3)
+    presence = tl.load(Params + safe * 6 + 4)
+    frequency = tl.load(Params + safe * 6 + 5)
+    neutral = (
+        (repetition == 1.0) & (presence.to(tl.int32, bitcast=True) == 0) & (frequency.to(tl.int32, bitcast=True) == 0)
+    )
+    if not neutral:
+        count = tl.load(Histogram + safe * hist_stride + token, inside, other=0)
+        for index in tl.static_range(STEP):
+            if index == STEP - 1:
+                candidate = previous
+            else:
+                candidate = tl.load(Tokens + row * DEPTH + index)
+            count += (token == candidate).to(tl.int32)
+        adjusted = tl.where(score > 0, tl.div_rn(score, repetition), score * repetition)
+        score = tl.where(count > 0, adjusted, score)
+        score = score - (count > 0).to(tl.float32) * presence - count.to(tl.float32) * frequency
+    score = tl.div_rn(score, tl.where(temperature > 0, temperature, 1.0))
+    if tl.load(GrammarEnabled + safe) != 0:
+        word = tl.load(Grammar + safe * mask_stride + token // 32, inside, other=0)
+        score = tl.where(((word >> (token % 32)) & 1) != 0, score, -float("inf"))
+    score = tl.where(inside, score, -float("inf"))
+    score_max = tl.max(score, 0)
+    finite_max = (score_max == score_max) & (tl.abs(score_max) < float("inf"))
+    exponential = tl.exp(score - tl.where(finite_max, score_max, 0.0))
+    partial = (row * DEPTH + STEP) * BLOCKS + block
+    tl.store(LseMax + partial, score_max)
+    tl.store(LseSum + partial, tl.sum(exponential, 0))
+    tl.store(Bad + partial, tl.sum((inside & ((score != score) | (score == float("inf")))).to(tl.int32), 0) != 0)
+    tl.store(Scores + (row * DEPTH + STEP) * V + token, score, inside)
+    draw = tl.load(Offsets + row) + 4 * STEP
+    noised = score + _token_noise(tl.load(Seeds + row), draw, token)
+    noised = tl.where(inside & (noised == noised), noised, -float("inf"))
+    index = tl.argmax(noised, 0, tie_break_left=True)
+    tl.store(Maximum + row * BLOCKS + block, tl.max(noised, 0))
+    tl.store(Arg + row * BLOCKS + block, block * BLOCK + index)
+
+
+@triton.jit
+def _resolve_prev_kernel(
+    Pending,
+    Tokens,
+    LseMax,
+    Bad,
+    PreviousMax,
+    PreviousArg,
+    Slots,
+    Generations,
+    LiveRows,
+    Generation,
+    Status,
+    V: tl.constexpr,
+    DEPTH: tl.constexpr,
+    STEP: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    PAD: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BATCH: tl.constexpr,
+    RUNNING: tl.constexpr,
+):
+    row = tl.program_id(0)
+    previous = _previous(PreviousMax, PreviousArg, row, BLOCKS, PAD)
+    prior_block = tl.arange(0, PAD)
+    previous_maxima = tl.load(
+        LseMax + (row * DEPTH + STEP - 1) * BLOCKS + prior_block, prior_block < BLOCKS, other=-float("inf")
+    )
+    previous_bad = tl.load(Bad + (row * DEPTH + STEP - 1) * BLOCKS + prior_block, prior_block < BLOCKS, other=0)
+    previous_maximum = tl.max(previous_maxima, 0)
+    previous_valid = (
+        _row_live(Slots, Generations, LiveRows, Generation, Status, row, CAPACITY, BATCH, RUNNING)
+        & (tl.sum(previous_bad.to(tl.int32), 0) == 0)
+        & (previous_maximum == previous_maximum)
+        & (tl.abs(previous_maximum) < float("inf"))
+    )
+    previous = tl.where(previous_valid, previous, 0)
+    tl.store(Tokens + row * DEPTH + STEP - 1, previous)
+
+
+@triton.jit
+def _reduce_lse_kernel(
+    LseMax,
+    LseSum,
+    Bad,
+    Maximum,
+    Arg,
+    Tokens,
+    Valid,
+    OutMax,
+    OutTotal,
+    Slots,
+    Generations,
+    LiveRows,
+    Generation,
+    Status,
+    DEPTH: tl.constexpr,
+    ACTIVE_DEPTH: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    PAD: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BATCH: tl.constexpr,
+    RUNNING: tl.constexpr,
+):
+    row, step = tl.program_id(0), tl.program_id(1)
+    if ACTIVE_DEPTH < DEPTH:
+        if step >= ACTIVE_DEPTH:
+            tl.store(Tokens + row * DEPTH + step, 0)
+            tl.store(Valid + row * DEPTH + step, False)
+            return
+    partial = tl.arange(0, PAD)
+    maxima = tl.load(LseMax + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=-float("inf"))
+    sums = tl.load(LseSum + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=0.0)
+    bad = tl.load(Bad + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=0)
+    maximum = tl.max(maxima, 0)
+    total = tl.sum(tl.where(partial < BLOCKS, sums * tl.exp(maxima - maximum), 0.0), 0)
+    scores_valid = (
+        _row_live(Slots, Generations, LiveRows, Generation, Status, row, CAPACITY, BATCH, RUNNING)
+        & (tl.sum(bad.to(tl.int32), 0) == 0)
+        & (maximum == maximum)
+        & (tl.abs(maximum) < float("inf"))
+    )
+    valid = scores_valid & (total > 0.0) & (total < float("inf"))
+    tl.store(OutMax + row * DEPTH + step, maximum)
+    tl.store(OutTotal + row * DEPTH + step, total)
+    tl.store(Valid + row * DEPTH + step, valid)
+    if step == ACTIVE_DEPTH - 1:
+        token_valid = scores_valid if ACTIVE_DEPTH < DEPTH else valid
+        tl.store(Tokens + row * DEPTH + step, tl.where(token_valid, _previous(Maximum, Arg, row, BLOCKS, PAD), 0))
+
+
+@triton.jit
+def _normalize_fast(
+    Scores,
+    OutMax,
+    OutTotal,
+    Valid,
+    V: tl.constexpr,
+    DEPTH: tl.constexpr,
+    ACTIVE_DEPTH: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
+    block, row, step = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < V
+    if ACTIVE_DEPTH < DEPTH:
+        if step >= ACTIVE_DEPTH:
+            tl.store(Scores + (row * DEPTH + step) * V + token, (token == 0).to(tl.float32), inside)
+            return
+    valid = tl.load(Valid + row * DEPTH + step)
+    maximum = tl.load(OutMax + row * DEPTH + step)
+    total = tl.load(OutTotal + row * DEPTH + step)
+    score = tl.load(Scores + (row * DEPTH + step) * V + token, inside, other=-float("inf"))
+    q = tl.exp(score - maximum) / total
+    tl.store(Scores + (row * DEPTH + step) * V + token, tl.where(valid, q, (token == 0).to(tl.float32)), inside)
+
+
+@triton.jit
+def _markov_step_batched(
+    Base,
+    Embed,
+    Head,
+    HeadScale,
+    Pending,
+    Tokens,
+    Scores,
+    LseMax,
+    LseSum,
+    Bad,
+    PreviousMax,
+    PreviousArg,
+    Maximum,
+    Arg,
+    Seeds,
+    Offsets,
+    Histogram,
+    Slots,
+    Generations,
+    LiveRows,
+    Generation,
+    Status,
+    Params,
+    Grammar,
+    GrammarEnabled,
+    base_row_stride,
+    base_step_stride,
+    hist_stride,
+    mask_stride,
+    V: tl.constexpr,
+    RANK: tl.constexpr,
+    DEPTH: tl.constexpr,
+    STEP: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    PAD: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BATCH: tl.constexpr,
+    RUNNING: tl.constexpr,
+    BLOCK: tl.constexpr,
+    CHUNK: tl.constexpr,
+    FP8: tl.constexpr,
+):
+    block = tl.program_id(0)
+    r0 = tl.program_id(1) * 2
+    r1 = r0 + 1
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < V
+    if STEP == 0:
+        p0 = tl.minimum(tl.maximum(tl.load(Pending + r0), 0), V - 1)
+        p1 = tl.minimum(tl.maximum(tl.load(Pending + r1), 0), V - 1)
+    else:
+        p0 = tl.minimum(tl.maximum(tl.load(Tokens + r0 * DEPTH + STEP - 1), 0), V - 1)
+        p1 = tl.minimum(tl.maximum(tl.load(Tokens + r1 * DEPTH + STEP - 1), 0), V - 1)
+    if RANK >= 64:
+        acc = tl.zeros((BLOCK, 16), dtype=tl.float32)
+        cols = tl.arange(0, 16)
+        c0 = cols == 0
+        c1 = cols == 1
+        zeros_e = tl.full((CHUNK, 16), 0.0, tl.bfloat16)
+        for start in tl.static_range(0, RANK, CHUNK):
+            column = start + tl.arange(0, CHUNK)
+            weights = tl.load(Head + token[:, None].to(tl.int64) * RANK + column[None, :],
+                              inside[:, None], other=0.0).to(tl.bfloat16)
+            e0 = tl.load(Embed + p0.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e1 = tl.load(Embed + p1.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e = tl.where(c0[None, :], e0[:, None], tl.where(c1[None, :], e1[:, None], zeros_e))
+            acc = tl.dot(weights, e, acc, out_dtype=tl.float32)
+        b0 = tl.sum(tl.where(c0[None, :], acc, 0.0), axis=1)
+        b1 = tl.sum(tl.where(c1[None, :], acc, 0.0), axis=1)
+    else:
+        b0 = tl.full((BLOCK,), 0.0, tl.float32)
+        b1 = tl.full((BLOCK,), 0.0, tl.float32)
+        for start in tl.static_range(0, RANK, CHUNK):
+            column = start + tl.arange(0, CHUNK)
+            weights = tl.load(Head + token[:, None].to(tl.int64) * RANK + column[None, :],
+                              inside[:, None], other=0.0).to(tl.float32)
+            e0 = tl.load(Embed + p0.to(tl.int64) * RANK + column).to(tl.float32)
+            e1 = tl.load(Embed + p1.to(tl.int64) * RANK + column).to(tl.float32)
+            b0 += tl.sum(weights * e0[None, :], 1)
+            b1 += tl.sum(weights * e1[None, :], 1)
+    if FP8:
+        scale = tl.load(HeadScale + token, inside, other=0.0).to(tl.float32)
+        b0 *= scale
+        b1 *= scale
+    _finish_markov_row(
+        r0, p0, b0, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+        Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+        base_row_stride, base_step_stride, hist_stride, mask_stride,
+        block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+    )
+    _finish_markov_row(
+        r1, p1, b1, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+        Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+        base_row_stride, base_step_stride, hist_stride, mask_stride,
+        block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+    )
+
+
+@triton.jit
+def _markov_step_batched4(
+    Base,
+    Embed,
+    Head,
+    HeadScale,
+    Pending,
+    Tokens,
+    Scores,
+    LseMax,
+    LseSum,
+    Bad,
+    PreviousMax,
+    PreviousArg,
+    Maximum,
+    Arg,
+    Seeds,
+    Offsets,
+    Histogram,
+    Slots,
+    Generations,
+    LiveRows,
+    Generation,
+    Status,
+    Params,
+    Grammar,
+    GrammarEnabled,
+    base_row_stride,
+    base_step_stride,
+    hist_stride,
+    mask_stride,
+    V: tl.constexpr,
+    RANK: tl.constexpr,
+    DEPTH: tl.constexpr,
+    STEP: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    PAD: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BATCH: tl.constexpr,
+    RUNNING: tl.constexpr,
+    BLOCK: tl.constexpr,
+    CHUNK: tl.constexpr,
+    FP8: tl.constexpr,
+):
+    block = tl.program_id(0)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < V
+    if STEP == 0:
+        p0 = tl.minimum(tl.maximum(tl.load(Pending + 0), 0), V - 1)
+        p1 = tl.minimum(tl.maximum(tl.load(Pending + 1), 0), V - 1)
+        p2 = tl.minimum(tl.maximum(tl.load(Pending + 2), 0), V - 1)
+        p3 = tl.minimum(tl.maximum(tl.load(Pending + 3), 0), V - 1)
+    else:
+        p0 = tl.minimum(tl.maximum(tl.load(Tokens + 0 * DEPTH + STEP - 1), 0), V - 1)
+        p1 = tl.minimum(tl.maximum(tl.load(Tokens + 1 * DEPTH + STEP - 1), 0), V - 1)
+        p2 = tl.minimum(tl.maximum(tl.load(Tokens + 2 * DEPTH + STEP - 1), 0), V - 1)
+        p3 = tl.minimum(tl.maximum(tl.load(Tokens + 3 * DEPTH + STEP - 1), 0), V - 1)
+    if RANK >= 64:
+        acc = tl.zeros((BLOCK, 16), dtype=tl.float32)
+        cols = tl.arange(0, 16)
+        c0 = cols == 0
+        c1 = cols == 1
+        c2 = cols == 2
+        c3 = cols == 3
+        zeros_e = tl.full((CHUNK, 16), 0.0, tl.bfloat16)
+        for start in tl.static_range(0, RANK, CHUNK):
+            column = start + tl.arange(0, CHUNK)
+            weights = tl.load(Head + token[:, None].to(tl.int64) * RANK + column[None, :],
+                              inside[:, None], other=0.0).to(tl.bfloat16)
+            e0 = tl.load(Embed + p0.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e1 = tl.load(Embed + p1.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e2 = tl.load(Embed + p2.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e3 = tl.load(Embed + p3.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e = tl.where(
+                c0[None, :], e0[:, None],
+                tl.where(
+                    c1[None, :], e1[:, None],
+                    tl.where(
+                        c2[None, :], e2[:, None],
+                        tl.where(c3[None, :], e3[:, None], zeros_e),
+                    ),
+                ),
+            )
+            acc = tl.dot(weights, e, acc, out_dtype=tl.float32)
+        b0 = tl.sum(tl.where(c0[None, :], acc, 0.0), axis=1)
+        b1 = tl.sum(tl.where(c1[None, :], acc, 0.0), axis=1)
+        b2 = tl.sum(tl.where(c2[None, :], acc, 0.0), axis=1)
+        b3 = tl.sum(tl.where(c3[None, :], acc, 0.0), axis=1)
+    else:
+        b0 = tl.full((BLOCK,), 0.0, tl.float32)
+        b1 = tl.full((BLOCK,), 0.0, tl.float32)
+        b2 = tl.full((BLOCK,), 0.0, tl.float32)
+        b3 = tl.full((BLOCK,), 0.0, tl.float32)
+        for start in tl.static_range(0, RANK, CHUNK):
+            column = start + tl.arange(0, CHUNK)
+            weights = tl.load(Head + token[:, None].to(tl.int64) * RANK + column[None, :],
+                              inside[:, None], other=0.0).to(tl.float32)
+            e0 = tl.load(Embed + p0.to(tl.int64) * RANK + column).to(tl.float32)
+            e1 = tl.load(Embed + p1.to(tl.int64) * RANK + column).to(tl.float32)
+            e2 = tl.load(Embed + p2.to(tl.int64) * RANK + column).to(tl.float32)
+            e3 = tl.load(Embed + p3.to(tl.int64) * RANK + column).to(tl.float32)
+            b0 += tl.sum(weights * e0[None, :], 1)
+            b1 += tl.sum(weights * e1[None, :], 1)
+            b2 += tl.sum(weights * e2[None, :], 1)
+            b3 += tl.sum(weights * e3[None, :], 1)
+    if FP8:
+        scale = tl.load(HeadScale + token, inside, other=0.0).to(tl.float32)
+        b0 *= scale
+        b1 *= scale
+        b2 *= scale
+        b3 *= scale
+    _finish_markov_row(
+        0, p0, b0, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+        Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+        base_row_stride, base_step_stride, hist_stride, mask_stride,
+        block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+    )
+    _finish_markov_row(
+        1, p1, b1, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+        Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+        base_row_stride, base_step_stride, hist_stride, mask_stride,
+        block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+    )
+    _finish_markov_row(
+        2, p2, b2, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+        Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+        base_row_stride, base_step_stride, hist_stride, mask_stride,
+        block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+    )
+    _finish_markov_row(
+        3, p3, b3, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+        Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+        base_row_stride, base_step_stride, hist_stride, mask_stride,
+        block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+    )
+
+
+@triton.jit
 def _markov_step(
     Base,
     Embed,
@@ -271,8 +748,23 @@ def _markov_step(
         if block == 0:
             tl.store(Tokens + row * DEPTH + STEP - 1, previous)
     previous = tl.minimum(tl.maximum(previous, 0), V - 1)
-    bias = _transition_bias(Embed, Head, HeadScale, previous, token, inside,
-                            RANK, CHUNK, BLOCK, FP8)
+    if RANK >= 64:
+        acc = tl.zeros((BLOCK, 16), dtype=tl.float32)
+        c0 = tl.arange(0, 16) == 0
+        zeros_e = tl.full((CHUNK, 16), 0.0, tl.bfloat16)
+        for start in tl.static_range(0, RANK, CHUNK):
+            column = start + tl.arange(0, CHUNK)
+            weights = tl.load(Head + token[:, None].to(tl.int64) * RANK + column[None, :],
+                              inside[:, None], other=0.0).to(tl.bfloat16)
+            emb = tl.load(Embed + previous.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e = tl.where(c0[None, :], emb[:, None], zeros_e)
+            acc = tl.dot(weights, e, acc, out_dtype=tl.float32)
+        bias = tl.sum(tl.where(c0[None, :], acc, 0.0), axis=1)
+        if FP8:
+            bias *= tl.load(HeadScale + token, inside, other=0.0).to(tl.float32)
+    else:
+        bias = _transition_bias(Embed, Head, HeadScale, previous, token, inside,
+                                RANK, CHUNK, BLOCK, FP8)
     score = (
         tl.load(Base + row * base_row_stride + STEP * base_step_stride + token, inside, other=0.0).to(tl.float32) + bias
     )
@@ -333,6 +825,7 @@ def _normalize(
     Status,
     V: tl.constexpr,
     DEPTH: tl.constexpr,
+    ACTIVE_DEPTH: tl.constexpr,
     BLOCKS: tl.constexpr,
     PAD: tl.constexpr,
     CAPACITY: tl.constexpr,
@@ -341,28 +834,36 @@ def _normalize(
     BLOCK: tl.constexpr,
 ):
     block, row, step = tl.program_id(0), tl.program_id(1), tl.program_id(2)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    if ACTIVE_DEPTH < DEPTH:
+        if step >= ACTIVE_DEPTH:
+            tl.store(Scores + (row * DEPTH + step) * V + token, (token == 0).to(tl.float32), token < V)
+            if block == 0:
+                tl.store(Tokens + row * DEPTH + step, 0)
+                tl.store(Valid + row * DEPTH + step, False)
+            return
     partial = tl.arange(0, PAD)
     maxima = tl.load(LseMax + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=-float("inf"))
     sums = tl.load(LseSum + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=0.0)
     bad = tl.load(Bad + (row * DEPTH + step) * BLOCKS + partial, partial < BLOCKS, other=0)
     maximum = tl.max(maxima, 0)
     total = tl.sum(tl.where(partial < BLOCKS, sums * tl.exp(maxima - maximum), 0.0), 0)
-    valid = (
+    scores_valid = (
         _row_live(Slots, Generations, LiveRows, Generation, Status, row, CAPACITY, BATCH, RUNNING)
         & (tl.sum(bad.to(tl.int32), 0) == 0)
         & (maximum == maximum)
         & (tl.abs(maximum) < float("inf"))
-        & (total > 0.0)
-        & (total < float("inf"))
     )
-    token = block * BLOCK + tl.arange(0, BLOCK)
+    valid = scores_valid & (total > 0.0) & (total < float("inf"))
     score = tl.load(Scores + (row * DEPTH + step) * V + token, token < V, other=-float("inf"))
     q = tl.exp(score - maximum) / total
     tl.store(Scores + (row * DEPTH + step) * V + token, tl.where(valid, q, (token == 0).to(tl.float32)), token < V)
     if block == 0:
         tl.store(Valid + row * DEPTH + step, valid)
-        if step == DEPTH - 1:
-            tl.store(Tokens + row * DEPTH + step, tl.where(valid, _previous(Maximum, Arg, row, BLOCKS, PAD), 0))
+        if step == ACTIVE_DEPTH - 1:
+            # At an interior step the full chain emits the token at the start of its successor.
+            token_valid = scores_valid if ACTIVE_DEPTH < DEPTH else valid
+            tl.store(Tokens + row * DEPTH + step, tl.where(token_valid, _previous(Maximum, Arg, row, BLOCKS, PAD), 0))
 
 
 class PreparedMarkovProposals:
@@ -376,7 +877,9 @@ class PreparedMarkovProposals:
     """
 
     @staticmethod
-    def scratch_layout(batch, depth, vocab, *, block=256):
+    def scratch_layout(batch, depth, vocab, *, block=None):
+        if block is None:
+            block = 128
         blocks = triton.cdiv(vocab, block)
         return dict(
             maxima=((2, batch, blocks), torch.float32),
@@ -384,6 +887,8 @@ class PreparedMarkovProposals:
             lse_max=((batch, depth, blocks), torch.float32),
             lse_sum=((batch, depth, blocks), torch.float32),
             bad=((batch, depth, blocks), torch.bool),
+            out_max=((batch, depth), torch.float32),
+            out_total=((batch, depth), torch.float32),
         )
 
     def __init__(
@@ -403,10 +908,15 @@ class PreparedMarkovProposals:
         offsets,
         *,
         workspace=None,
+        proposal_capacity=None,
     ):
-        if base.ndim != 3:
+        if base.ndim != 3 or tokens.ndim != 2:
             raise ValueError("fused Markov logits require request, draft and vocabulary dimensions")
-        batch, depth, vocab = base.shape
+        batch, available, vocab = base.shape
+        depth = tokens.shape[1]
+        self.active_depth = depth if proposal_capacity is None else proposal_capacity
+        if type(self.active_depth) is not int or not 0 <= self.active_depth <= available <= depth:
+            raise ValueError("proposal capacity must fit the available logits and logical Markov block")
         _geometry(batch, depth + 1)
         fp8 = isinstance(head, RowScaledFP8MarkovWeight)
         values = head.values if fp8 else head
@@ -426,7 +936,7 @@ class PreparedMarkovProposals:
             or values.device != base.device
             or embedding.device != base.device
             or base.stride(1) < vocab
-            or base.stride(0) < depth * base.stride(1)
+            or base.stride(0) < available * base.stride(1)
         ):
             raise ValueError(
                 "fused Markov proposals require strided BF16/FP32 logits and contiguous BF16 or row-scaled E4M3 tables"
@@ -451,8 +961,8 @@ class PreparedMarkovProposals:
         self.tokens, self.probabilities, self.valid = tokens, probabilities, valid
         self.state, self.slots, self.generations, self.live_rows = (requests, slots, generations, live_rows)
         self.seeds, self.offsets = seeds, offsets
-        self.batch, self.depth, self.vocab, self.block = batch, depth, vocab, 256
-        self.scratch = bind_scratch(self.scratch_layout(batch, depth, vocab), device=base.device, workspace=workspace)
+        self.batch, self.depth, self.vocab, self.block = batch, depth, vocab, 128
+        self.scratch = bind_scratch(self.scratch_layout(batch, depth, vocab, block=self.block), device=base.device, workspace=workspace)
         self.kernels = None
 
     def prepare(self):
@@ -460,9 +970,11 @@ class PreparedMarkovProposals:
 
         b, d, v, block = self.batch, self.depth, self.vocab, self.block
         n = triton.cdiv(v, block)
+        rank = self.head_values.shape[1]
+        chunk = 128 if (b in (2, 4) and rank >= 128 and rank % 128 == 0) else 64
         common = dict(
             V=v,
-            RANK=self.head_values.shape[1],
+            RANK=rank,
             DEPTH=d,
             BLOCKS=n,
             PAD=triton.next_power_of_2(n),
@@ -470,64 +982,156 @@ class PreparedMarkovProposals:
             BATCH=b,
             RUNNING=RUNNING,
             BLOCK=block,
-            CHUNK=64,
+            CHUNK=chunk,
             FP8=self.head_scale is not None,
             num_warps=4,
             enable_fp_fusion=False,
         )
         kernels = []
         s = self.scratch
-        for step in range(d):
+        self.pre_resolve = b == 4 or (b > 1 and b % 2 == 0)
+        if b == 4:
+            step_kernel = _markov_step_batched4
+            step_grid = (n, 1, 1)
+        elif b % 2 == 0:
+            step_kernel = _markov_step_batched
+            step_grid = (n, b // 2, 1)
+        else:
+            step_kernel = _markov_step
+            step_grid = (n, b, 1)
+        resolve_ops = []
+        step_ops = []
+        for step in range(self.active_depth):
             before, after = (step - 1) % 2, step % 2
-            kernels.append(
-                prepare_triton(
-                    _markov_step,
+            if self.pre_resolve and step > 0:
+                rop = prepare_triton(
+                    _resolve_prev_kernel,
                     (
-                        self.base,
-                        self.embedding,
-                        self.head_values,
-                        self.head_values if self.head_scale is None else self.head_scale,
                         self.pending,
                         self.tokens,
-                        self.probabilities,
                         s["lse_max"],
-                        s["lse_sum"],
                         s["bad"],
                         s["maxima"][before],
                         s["arguments"][before],
-                        s["maxima"][after],
-                        s["arguments"][after],
-                        self.seeds,
-                        self.offsets,
-                        self.state.histogram,
                         self.slots,
                         self.generations,
                         self.live_rows,
                         self.state.generation,
                         self.state.status,
-                        self.state.parameters,
-                        self.state.grammar_mask,
-                        self.state.grammar_enabled,
-                        self.base.stride(0),
-                        self.base.stride(1),
-                        self.state.histogram.stride(0),
-                        self.state.grammar_mask.stride(0),
                     ),
-                    (n, b, 1),
+                    (b, 1, 1),
+                    V=v,
+                    DEPTH=d,
                     STEP=step,
-                    **common,
+                    BLOCKS=n,
+                    PAD=triton.next_power_of_2(n),
+                    CAPACITY=self.state.capacity,
+                    BATCH=b,
+                    RUNNING=RUNNING,
+                    num_warps=4,
+                    enable_fp_fusion=False,
                 )
+                resolve_ops.append(rop)
+                kernels.append(rop)
+            else:
+                resolve_ops.append(None)
+            sop = prepare_triton(
+                step_kernel,
+                (
+                    self.base,
+                    self.embedding,
+                    self.head_values,
+                    self.head_values if self.head_scale is None else self.head_scale,
+                    self.pending,
+                    self.tokens,
+                    self.probabilities,
+                    s["lse_max"],
+                    s["lse_sum"],
+                    s["bad"],
+                    s["maxima"][before],
+                    s["arguments"][before],
+                    s["maxima"][after],
+                    s["arguments"][after],
+                    self.seeds,
+                    self.offsets,
+                    self.state.histogram,
+                    self.slots,
+                    self.generations,
+                    self.live_rows,
+                    self.state.generation,
+                    self.state.status,
+                    self.state.parameters,
+                    self.state.grammar_mask,
+                    self.state.grammar_enabled,
+                    self.base.stride(0),
+                    self.base.stride(1),
+                    self.state.histogram.stride(0),
+                    self.state.grammar_mask.stride(0),
+                ),
+                step_grid,
+                STEP=step,
+                **common,
             )
-        kernels.append(
-            prepare_triton(
+            step_ops.append(sop)
+            kernels.append(sop)
+        if self.pre_resolve:
+            self.reduce_lse_op = prepare_triton(
+                _reduce_lse_kernel,
+                (
+                    s["lse_max"],
+                    s["lse_sum"],
+                    s["bad"],
+                    s["maxima"][(self.active_depth - 1) % 2],
+                    s["arguments"][(self.active_depth - 1) % 2],
+                    self.tokens,
+                    self.valid,
+                    s["out_max"],
+                    s["out_total"],
+                    self.slots,
+                    self.generations,
+                    self.live_rows,
+                    self.state.generation,
+                    self.state.status,
+                ),
+                (b, d, 1),
+                DEPTH=d,
+                ACTIVE_DEPTH=self.active_depth,
+                BLOCKS=n,
+                PAD=triton.next_power_of_2(n),
+                CAPACITY=self.state.capacity,
+                BATCH=b,
+                RUNNING=RUNNING,
+                num_warps=4,
+                enable_fp_fusion=False,
+            )
+            self.norm_op = prepare_triton(
+                _normalize_fast,
+                (
+                    self.probabilities,
+                    s["out_max"],
+                    s["out_total"],
+                    self.valid,
+                ),
+                (triton.cdiv(v, 256), b, d),
+                V=v,
+                DEPTH=d,
+                ACTIVE_DEPTH=self.active_depth,
+                BLOCK=256,
+                num_warps=4,
+                enable_fp_fusion=False,
+            )
+            kernels.extend((self.reduce_lse_op, self.norm_op))
+        else:
+            self.reduce_lse_op = None
+            self.norm_op = prepare_triton(
                 _normalize,
                 (
                     self.probabilities,
                     s["lse_max"],
                     s["lse_sum"],
                     s["bad"],
-                    s["maxima"][(d - 1) % 2],
-                    s["arguments"][(d - 1) % 2],
+                    s["maxima"][(self.active_depth - 1) % 2],
+                    s["arguments"][(self.active_depth - 1) % 2],
                     self.tokens,
                     self.valid,
                     self.slots,
@@ -539,6 +1143,7 @@ class PreparedMarkovProposals:
                 (n, b, d),
                 V=v,
                 DEPTH=d,
+                ACTIVE_DEPTH=self.active_depth,
                 BLOCKS=n,
                 PAD=triton.next_power_of_2(n),
                 CAPACITY=self.state.capacity,
@@ -548,7 +1153,9 @@ class PreparedMarkovProposals:
                 num_warps=4,
                 enable_fp_fusion=False,
             )
-        )
+            kernels.append(self.norm_op)
+        self.resolve_ops = tuple(resolve_ops)
+        self.step_ops = tuple(step_ops)
         self.kernels = tuple(kernels)
         self()
 
@@ -557,11 +1164,19 @@ class PreparedMarkovProposals:
             raise RuntimeError("fused Markov preparation must finish before functional conversion")
         self.local_layout = {name: (tuple(value.shape), value.dtype) for name, value in self.scratch.items()}
         # Kernel operand positions preserve the prepared tensor layouts and schedule.
-        for kernel in self.kernels[:-1]:
+        for rop in self.resolve_ops:
+            if rop is not None:
+                rop.args = tuple(None if index < 6 else value for index, value in enumerate(rop.args))
+        for kernel in self.step_ops:
             kernel.args = tuple(None if index in (0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
                                 else value for index, value in enumerate(kernel.args))
-        kernel = self.kernels[-1]
-        kernel.args = tuple(None if index < 8 else value for index, value in enumerate(kernel.args))
+        if self.reduce_lse_op is not None:
+            self.reduce_lse_op.args = tuple(
+                None if index < 9 else value for index, value in enumerate(self.reduce_lse_op.args)
+            )
+            self.norm_op.args = (None, None, None, None)
+        else:
+            self.norm_op.args = tuple(None if index < 8 else value for index, value in enumerate(self.norm_op.args))
         self.base = self.pending = self.tokens = self.probabilities = self.valid = self.seeds = self.offsets = None
         self.scratch = None
         return self
@@ -569,19 +1184,36 @@ class PreparedMarkovProposals:
     def run(self, base, pending, tokens, probabilities, valid, seeds, offsets):
         scratch = {name: torch.empty(shape, dtype=dtype, device=base.device)
                    for name, (shape, dtype) in self.local_layout.items()}
-        for step, operation in enumerate(self.kernels[:-1]):
-            args = list(operation.args)
+        for step, (rop, operation) in enumerate(zip(self.resolve_ops, self.step_ops, strict=True)):
             before, after = (step - 1) % 2, step % 2
+            if rop is not None:
+                rargs = list(rop.args)
+                rargs[:6] = (pending, tokens, scratch["lse_max"], scratch["bad"],
+                             scratch["maxima"][before], scratch["arguments"][before])
+                launch_triton(rop.kernel, rop.compiled, tuple(rargs), rop.grid, **rop.options)
+            args = list(operation.args)
             args[0], args[4], args[5], args[6] = base, pending, tokens, probabilities
             args[7:16] = (scratch["lse_max"], scratch["lse_sum"], scratch["bad"],
                 scratch["maxima"][before], scratch["arguments"][before],
                 scratch["maxima"][after], scratch["arguments"][after], seeds, offsets)
             launch_triton(operation.kernel, operation.compiled, tuple(args), operation.grid, **operation.options)
-        operation = self.kernels[-1]
-        args = list(operation.args)
-        args[:8] = (probabilities, scratch["lse_max"], scratch["lse_sum"], scratch["bad"],
-            scratch["maxima"][(self.depth - 1) % 2], scratch["arguments"][(self.depth - 1) % 2], tokens, valid)
-        launch_triton(operation.kernel, operation.compiled, tuple(args), operation.grid, **operation.options)
+        last = (self.active_depth - 1) % 2
+        if self.reduce_lse_op is not None:
+            rl = self.reduce_lse_op
+            rl_args = list(rl.args)
+            rl_args[:9] = (scratch["lse_max"], scratch["lse_sum"], scratch["bad"],
+                scratch["maxima"][last], scratch["arguments"][last], tokens, valid,
+                scratch["out_max"], scratch["out_total"])
+            launch_triton(rl.kernel, rl.compiled, tuple(rl_args), rl.grid, **rl.options)
+            no = self.norm_op
+            launch_triton(no.kernel, no.compiled, (probabilities, scratch["out_max"], scratch["out_total"], valid),
+                          no.grid, **no.options)
+        else:
+            operation = self.norm_op
+            args = list(operation.args)
+            args[:8] = (probabilities, scratch["lse_max"], scratch["lse_sum"], scratch["bad"],
+                scratch["maxima"][last], scratch["arguments"][last], tokens, valid)
+            launch_triton(operation.kernel, operation.compiled, tuple(args), operation.grid, **operation.options)
         return tokens, probabilities, valid
 
     def __call__(self):

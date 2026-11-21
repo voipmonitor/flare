@@ -7,6 +7,50 @@ import pytest
 import torch
 
 
+@pytest.mark.parametrize("replicated", [False, True])
+def test_registering_packed_rounds_preserves_the_graph_catalog(monkeypatch, replicated):
+    from types import SimpleNamespace
+    from ignition.components import parallel_draft
+    from ignition.components.capacity import parallel_speculative_shapes
+    from ignition.preparation.execution import GraphSignature
+    from ignition.recipes.kimi3.bootstrap import _register_speculative_graphs
+    from ignition.recipes.kimi3.config import DSparkConfig
+    from ignition.recipes.kimi3.dspark import DraftForwards
+
+    logits = torch.arange(7)
+    draft = DraftForwards(None, None, lambda gather_rows=None: logits[:gather_rows], None)
+    owner = SimpleNamespace(forwards=draft, block_proposal_broadcast=replicated,
+        weights=SimpleNamespace(config=SimpleNamespace(draft=DSparkConfig({}))))
+
+    class Round:
+        def __init__(self, owner, batch, width, name, *, target_token_capacity, forwards):
+            self.draft = forwards.draft
+
+        def prepare(self):
+            self.logits = self.draft()
+
+    monkeypatch.setattr(parallel_draft, "PreparedParallelDraftRound", Round)
+    prefill = object()
+    catalog = {"prefill2048": prefill}
+    signatures = {}
+    def register(name, operation, kind, rows, tokens, fields, *, enabled, packed_tokens):
+        catalog[name] = operation
+        signatures[name] = GraphSignature(kind, rows, tokens, fields, speculation_enabled=enabled,
+                                          packed_token_capacity=packed_tokens)
+
+    shapes = (*parallel_speculative_shapes(1, tuple(range(1, 9)), 32, 16), (2, 8, 6))
+    _register_speculative_graphs(owner, shapes, SimpleNamespace(buffers=lambda: ("input_token_ids",)), register)
+    assert catalog["prefill2048"] is prefill and owner.forwards is draft
+    assert len(catalog) == 1 + len(shapes) and len(signatures) == len(shapes)
+    for batch, width, packed in shapes:
+        name = f"speculative{batch}x{width}-tokens{packed}"
+        signature = signatures[name]
+        assert (signature.batch_capacity, signature.token_capacity, signature.packed_token_capacity) == (batch, width, packed)
+        assert signature.inputs == ("input_token_ids", "sampling_grammar_mask")
+        count = packed - 1 if replicated and batch == 1 and 1 < packed < width else 7
+        assert torch.equal(catalog[name].logits, logits[:count])
+
+
 @pytest.mark.parametrize("recipe", ["kimi3", "kimi31"])
 @pytest.mark.parametrize("batch", [1, 2, 4, 8])
 def test_draft_result_preserves_every_block_position(recipe, batch):

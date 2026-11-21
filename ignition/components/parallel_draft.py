@@ -185,9 +185,8 @@ class PreparedParallelDraftRound:
         head = getattr(getattr(o.weights, "draft", None), "markov_head", None)
         from .markov_sampling import RowScaledFP8MarkovWeight
 
-        # Full-vocabulary transition fusion improves one-row proposals. Wider
-        # rows retain the bounded sampler because transition-weight reuse wins.
-        fuse_markov = (b == 1 and w > 1 and self.generate_proposals
+        # Full-vocabulary transition fusion shares transition weight loads across b=1,2,4 rows.
+        fuse_markov = (b in (1, 2, 4) and w > 1 and self.generate_proposals
             and getattr(o, "block_proposal_broadcast", False) and o.markov_runtime is None
             and self.selector is None and self.markov is not None
             and ((isinstance(head, torch.Tensor) and head.dtype == torch.bfloat16 and head.is_contiguous())
@@ -229,12 +228,12 @@ class PreparedParallelDraftRound:
         if fuse_markov:
             from .markov_sampling import PreparedMarkovProposals, PreparedDraftTokenBroadcast
 
-            block = self.draft_inputs.shape[1]
-            base = draft_logits_example.view(b, block, -1)[:, o.logit_offset:o.logit_offset + w - 1]
+            base = draft_logits_example.view(b, -1, draft_logits_example.shape[-1])[:, o.logit_offset:o.logit_offset + w - 1]
             self.full_proposal = PreparedMarkovProposals(base, o.weights.draft.markov_embedding, head,
                 self.markov_token, self.drafts, self.probabilities, self.valid, o.requests,
                 o.inputs.row_slot_ids[:b], o.inputs.row_generations[:b], o.inputs.live_rows,
-                self.seed, self.base_offset, workspace=None)
+                self.seed, self.base_offset, workspace=None,
+                proposal_capacity=min(w - 1, self.target_token_capacity - 1))
             self.full_proposal.prepare()
             runtime = getattr(o, "result_runtime", None)
             if runtime is None:
@@ -430,7 +429,7 @@ class PreparedParallelDraftRound:
             result = self.draft(draft_metadata)
             draft_logits, selector_features = result[:2]
             features = result[2] if len(result) == 3 else None
-            draft_logits = draft_logits.view(b, block, -1)
+            draft_logits = draft_logits.view(b, -1, draft_logits.shape[-1])
             unary = shortlist_ids = None
             if self.shortlisted_selector is not None:
                 unary, shortlist_ids = self.shortlisted_selector.prepare_shortlists(draft_logits, features=selector_features)

@@ -126,8 +126,8 @@ class Speculation:
     def __post_init__(self):
         if self.mtp_only and self.draft_tokens < 1:
             raise ValueError("--mtp-only requires positive learned draft depth")
-        if self.method not in (None, "mtp", "dflash2"):
-            raise ValueError("speculative method must be omitted, mtp or dflash2")
+        if self.method not in (None, "mtp", "dspark", "dflash2"):
+            raise ValueError("speculative method must be omitted, mtp, dspark or dflash2")
         if self.vocabulary_parallel_sampling and self.draft_tokens < 1:
             raise ValueError("vocabulary-parallel sampling requires positive learned draft depth")
         if self.vocabulary_parallel_sampling and self.markov_head_quantization == "nvfp4":
@@ -301,7 +301,7 @@ class Recipe:
         if self.speculation is not None and set(self.plain_ranks) != set(self.ranks):
             raise ValueError("a recipe that speculates declares its costs without speculation for every rank count")
         for name, method in self.speculative_methods.items():
-            if name not in ("mtp", "dflash2") or set(method.ranks) != set(self.ranks):
+            if name not in ("mtp", "dspark", "dflash2") or set(method.ranks) != set(self.ranks):
                 raise ValueError("speculative methods require known names and every declared tensor-parallel size")
             if method.draft_bytes is not None and method.draft_bytes <= 0:
                 raise ValueError("speculative draft bytes must be positive")

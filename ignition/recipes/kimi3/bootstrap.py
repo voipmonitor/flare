@@ -48,7 +48,7 @@ from ignition.preparation.tuning import RecordedPreparationSession, with_autotun
 from ignition.preparation.tuning_replicas import TuningReplica
 from ignition.progress import phase
 
-from .config import ModelConfig, PAGE_TOKENS
+from .config import DSparkConfig, ModelConfig, PAGE_TOKENS
 from ignition.recipes.kimi31.dflash_config import DFlash2Config
 from .contract import prepare as prepare_contract
 from .decoder import DecoderStorage, PreparedDecoder, Scratch
@@ -93,6 +93,8 @@ class PreparationConfig(BasePreparationConfig):
     draft_checkpoint: Path | None = None
     draft_head_quantization: str | None = None
     draft_body_quantization: str | None = None
+    markov_head_quantization: str | None = None
+    speculative_method: str | None = None
     # Verification widths count the pending input and up to seven drafts.
     speculative_widths: tuple[int, ...] = tuple(range(1, 9))
     speculative_graph_budget: int = 64
@@ -111,6 +113,9 @@ class PreparationConfig(BasePreparationConfig):
     frontend_template: str | None = None
 
     def __post_init__(self):
+        if self.markov_head_quantization is not None and (
+                self.markov_head_quantization != "fp8" or self.speculative_method != "dspark"):
+            raise ValueError("row-scaled FP8 Markov weights require the sliding-window DSpark method")
         if self.mtp_only and (not self.drafting
                 or max(self.speculative_widths, default=1) <= 1 or self.speculative_fixed_width == 1):
             raise ValueError("--mtp-only requires enabled learned speculation with positive draft depth")
@@ -238,6 +243,25 @@ def _benchmark_state(buffers, pool, requests, speculation):
     return state
 
 
+def _register_speculative_graphs(speculation, shapes, inputs, register):
+    """Register every packed graph with its own draft vocabulary prefix."""
+    from functools import partial
+    from ignition.components.parallel_draft import PreparedParallelDraftRound
+
+    for batch, width, packed in sorted(shapes, key=lambda shape: (shape[2], shape[0]), reverse=True):
+        name = f"speculative{batch}x{width}-tokens{packed}"
+        round_forwards = speculation.forwards
+        if (batch == 1 and 1 < packed < width and getattr(speculation, "block_proposal_broadcast", False)
+                and isinstance(speculation.weights.config.draft, DSparkConfig)):
+            # Preserve the complete local GEMM. Only this prefix enters the fused sampler.
+            round_forwards = replace(round_forwards, draft=partial(round_forwards.draft, gather_rows=packed - 1))
+        operation = PreparedParallelDraftRound(speculation, batch, width, name, target_token_capacity=packed,
+                                              forwards=round_forwards)
+        operation.prepare()
+        register(name, operation, "speculative", batch, width, (*inputs.buffers(), "sampling_grammar_mask"),
+                 enabled=True, packed_tokens=packed)
+
+
 @torch.no_grad()
 @with_autotune_effort
 def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
@@ -260,7 +284,9 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                                     draft_checkpoint=config.draft_checkpoint, peers=peers,
                                     vision=config.vision,
                                     draft_head_quantization=config.draft_head_quantization,
-                                    draft_body_quantization=config.draft_body_quantization)
+                                    draft_body_quantization=config.draft_body_quantization,
+                                    markov_head_quantization=config.markov_head_quantization,
+                                    speculative_method=config.speculative_method)
         del manifest
         release_unused()
     transient = contextlib.ExitStack()
@@ -314,7 +340,7 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                 convolution_collective = create_head_exchange(group, device,
                     max_rows=slots*(config.draft_tokens+1), heads=shard.world_size,
                     head_dim=4*weights.config.hidden//16//shard.world_size, ipc=core_storage.peer_storage)
-            else:
+            elif config.markov_head_quantization is None:
                 markov_collective = create_all_gather_runtime(group, device, max_rows=slots,
                     columns=2 * weights.config.vocabulary, ipc=core_storage.peer_storage)
         router_collective = create_all_gather_runtime(group, device, max_rows=channel_rows,
@@ -512,14 +538,7 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
                             (*forward_inputs, *(vision_prefill.buffers() if mode == "prefill" and patches else ())),
                             enabled=enabled)
             if speculation is not None:
-                from ignition.components.parallel_draft import PreparedParallelDraftRound
-
-                for batch, width, packed in sorted(config.speculative_round_shapes, key=lambda shape: (shape[2], shape[0]), reverse=True):
-                    name = f"speculative{batch}x{width}-tokens{packed}"
-                    forward = PreparedParallelDraftRound(speculation, batch, width, name,
-                        target_token_capacity=packed)
-                    forward.prepare()
-                    add(name, forward, "speculative", batch, width, (*inputs.buffers(), "sampling_grammar_mask"), enabled=True, packed_tokens=packed)
+                _register_speculative_graphs(speculation, config.speculative_round_shapes, inputs, add)
 
             for capacity in reversed(patches):
                 name = f"vision{capacity}"
@@ -649,8 +668,8 @@ def prepare_rank(snapshot, config, *, rank, group, progress=None, core_storage):
             speculative_fixed_width=config.speculative_fixed_width)
         memory.update(speculative_round_shapes=config.speculative_round_shapes,
                       speculative_graph_budget=config.speculative_graph_budget)
-    aliases = (("weights.draft.embedding", "weights.embedding"),) if (drafting and weights.config.dsa is not None
-        and not isinstance(weights.config.draft, DFlash2Config)) else ()
+    aliases = (("weights.draft.embedding", "weights.embedding"),) if (
+        drafting and getattr(weights.draft, "embedding", None) is weights.embedding) else ()
     state = None if config.benchmark_selection is None else _benchmark_state(buffers, pool, requests, speculation)
     return PreparedModel(rebuild_weights=declare_weights(weights,
         components=('embedding', 'norm', 'head', 'output_res_score', 'vision', 'draft'), aliases=aliases),

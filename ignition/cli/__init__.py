@@ -169,7 +169,7 @@ def _preparation_arguments(running, *, model_default="defaults.model"):
     speculative = running.add_argument_group("speculative decoding",
         "MTP flags configure speculative decoding, including DSpark and DFlash.\n"
         "Recipe defaults and limits: ignition export MODEL --help.")
-    speculative.add_argument("--speculative-method", choices=("mtp", "dflash2"),
+    speculative.add_argument("--speculative-method", choices=("mtp", "dspark", "dflash2"),
                           help="learned proposal method; supported choices and the default depend on MODEL")
     speculative.add_argument("--no-mtp", action="store_true",
                           help="disable multi-token speculation: load no draft model and decode one token"

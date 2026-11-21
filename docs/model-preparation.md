@@ -1293,6 +1293,27 @@ Forward compilation is enabled. The 64-token speculative capacity accommodates
 eight requests at verification width eight, including each pending token.
 The separate packed speculative graph budget defaults to 64.
 
+To use the five-layer grouped-query [Inferact DSpark draft](https://huggingface.co/Inferact/Kimi-K3.1-Pro-DSpark/tree/e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f),
+select `--speculative-method dspark`. The default uses the full-context preview draft described above.
+Ignition loads the pinned grouped-query checkpoint from the Hub or an embedded `dspark/` directory.
+Each grouped-query layer retains its 2,048-token sliding window in continuation state. The draft
+uses the target embedding and vocabulary head when its checkpoint omits them.
+
+```sh
+ulimit -Sn 65536
+.venv/bin/ignition export kimi-k3.1-pro --gpus 0-15 --max-concurrency 1 --image-concurrency 1 \
+  --prefill-chunk-size 2048 --speculative-method dspark --mtp-draft-tokens 7 \
+  --speculative-token-capacity 32 --speculative-graph-budget 16 --online-mxfp8 --online-mxfp8-scope all \
+  --draft-head-quantization nvfp4 --markov-head-quantization fp8 --autotune-effort default
+```
+
+Both heads default to checkpoint BF16. The example keeps the target vocabulary projection in BF16
+and prepares a separate NVFP4 draft head. Select `--draft-head-quantization mxfp8` for an MXFP8
+draft head. The FP8 Markov option stores the complete row-scaled transition matrix on each rank
+so the single-request sampler can compute consecutive proposals without a vocabulary exchange at
+each position. With `--online-mxfp8-scope all` the grouped-query draft also converts its QKV and
+accepted-context K/V projections.
+
 Each sparse-attention layer stores 128 E4M3 latent records and 128 index records
 per local page. Each index record contains 128 E4M3 values and one FP32 scale;
 two 64-record index subpages share the latent page's logical allocation.

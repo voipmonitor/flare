@@ -39,7 +39,7 @@ class ModelWeights:
     @classmethod
     def load(cls, manifest, device, *, shard, progress=None, draft_checkpoint=None, online_mxfp8=False,
              online_mxfp8_scope="all", peers=None, vision=True, draft_head_quantization=None,
-             draft_body_quantization=None):
+             draft_body_quantization=None, markov_head_quantization=None, speculative_method=None):
         """``peers``, a host's Gloo group and peer storage, reads column-sharded projections once per host.
 
         ``draft_checkpoint`` loads the declared DSpark or DFlash2 checkpoint.
@@ -71,10 +71,18 @@ class ModelWeights:
         if draft_checkpoint is not None:
             raw_draft = json.loads((Path(draft_checkpoint) / "config.json").read_text())
             draft_online_mxfp8 = online_mxfp8 and online_mxfp8_scope == "all"
-            if raw_draft.get("architectures") == ["DFlash2DraftModel"]:
+            if speculative_method == "dspark":
+                from ignition.recipes.kimi31.dspark_config import window_draft
+                from .dspark_weights import DraftWeights
+
+                draft_spec = window_draft(raw_draft, config.text)
+                draft_args = dict(target_embedding=embedding, draft_head_quantization=draft_head_quantization,
+                                  markov_head_quantization=markov_head_quantization)
+            elif raw_draft.get("architectures") == ["DFlash2DraftModel"]:
                 from ignition.recipes.kimi31.dflash_weights import DraftWeights
                 draft_online_mxfp8 = draft_online_mxfp8 or draft_body_quantization == "mxfp8"
-                draft_config, draft_args = DSparkConfig, dict(draft_head_quantization=draft_head_quantization)
+                draft_spec = DSparkConfig.load(draft_checkpoint, config)
+                draft_args = dict(draft_head_quantization=draft_head_quantization)
             elif draft_body_quantization is not None:
                 raise ValueError("DFlash2 body conversion requires DFlash2 draft weights")
             elif draft_head_quantization is not None:
@@ -82,13 +90,14 @@ class ModelWeights:
             elif config.dsa is None:
                 from .dspark_weights import DraftWeights
 
-                draft_config, draft_args = DSparkConfig, {}
+                draft_spec, draft_args = DSparkConfig.load(draft_checkpoint, config), {}
             else:
-                from ignition.recipes.kimi31.dspark_config import DSparkConfig as draft_config
+                from ignition.recipes.kimi31.dspark_config import DSparkConfig as MLADraftConfig
                 from ignition.recipes.kimi31.dspark_weights import DraftWeights
 
+                draft_spec = MLADraftConfig.load(draft_checkpoint, config)
                 draft_args = dict(target_embedding=embedding)
-            config = replace(config, draft=draft_config.load(draft_checkpoint, config))
+            config = replace(config, draft=draft_spec)
             draft = DraftWeights.load(draft_checkpoint, config, device, shard, target_head=head, progress=progress,
                                       online_mxfp8=draft_online_mxfp8, **draft_args)
         return cls(config, shard, embedding, norm, head, output_res_score, tuple(layers),
