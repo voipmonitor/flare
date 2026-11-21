@@ -20,10 +20,8 @@ def _attend(q: torch.Tensor, cache: torch.Tensor, output: torch.Tensor, pages: t
     plan = plan_from_handle(handle)
     binding = dense_mla.bind(plan, q=q, kv_cache=cache, output=output, page_table=pages,
         cache_seqlens=lengths, cu_seqlens_q=starts, scratch=scratch, sm_scale=scale,
-        kv_scale=kv_scale, q_scale=q_scale)
-    _, logsumexp = dense_mla.run(binding=binding)
-    if lse is not None:
-        lse.copy_(logsumexp)
+        kv_scale=kv_scale, q_scale=q_scale, lse_output=lse)
+    dense_mla.run(binding=binding)
 
 
 @_attend.register_fake
@@ -34,7 +32,9 @@ def _fake_attend(q, cache, output, pages, lengths, starts, scratch, handle, scal
 class PreparedDenseMLA:
     """Dense MLA over a paged cache; an E4M3 cache defaults to unit query and cache scales.
 
-    With ``lse``, each query head's natural-log LSE [rows, heads] is copied out beside the output.
+    With ``lse``, the selected kernel writes its per-head natural-log normalizers directly
+    into the caller-owned contiguous FP32 ``[max_total_q, num_q_heads]`` buffer validated
+    by ``dense_mla.bind(..., lse_output=lse)``.
     """
 
     def __init__(self, query, cache, output, page_table, lengths, starts, *, caps, scale, session, name, workspace,
@@ -97,7 +97,7 @@ class PreparedDenseMLA:
                 return
             scratch = planned_scratch(self.plan.scratch_specs(), workspace)
             self.scratch = list(scratch) if isinstance(scratch, tuple) else [scratch]
-            dense_mla.bind(self.plan, **declaration, sm_scale=scale, scratch=self.scratch)
+            dense_mla.bind(self.plan, **declaration, sm_scale=scale, scratch=self.scratch, lse_output=self.lse)
 
         register_finalizer(session, finalize, workspace=workspace)
 
@@ -128,8 +128,8 @@ class PreparedDenseMLA:
                     a["kv_scale"], a["q_scale"])
             return output
         shape, stride, dtype = self.output_layout
-        output = torch.empty_strided(shape, stride, dtype=dtype, device=query.device).zero_()
-        lse = torch.empty_strided(*self.lse_layout, dtype=torch.float32, device=query.device).zero_() if self.return_lse else None
+        output = torch.empty_strided(shape, stride, dtype=dtype, device=query.device)
+        lse = torch.empty_strided(*self.lse_layout, dtype=torch.float32, device=query.device) if self.return_lse else None
         scratch = [torch.empty(shape, dtype=dtype, device=query.device) for shape, dtype in self.scratch_layout]
         if page_table.stride() != self.page_table_stride:
             page_table = torch.empty_strided(page_table.shape, self.page_table_stride,
