@@ -3777,6 +3777,11 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
 
 fn make_immutable(path: &Path) -> Result<()> {
     let mut permissions = fs::metadata(path).map_err(failure)?.permissions();
+    // A staging tree can hardlink a read-only payload owned by another user.
+    // Linking and reading it do not grant permission to change its inode mode.
+    if permissions.readonly() {
+        return Ok(());
+    }
     permissions.set_readonly(true);
     fs::set_permissions(path, permissions).map_err(failure)
 }
@@ -4335,13 +4340,18 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn commit_seals_every_regular_file_including_the_primary() {
+        use std::os::unix::fs::MetadataExt;
+
         let temporary = Temporary::new();
         let root = temporary.root();
         let object = install(&root, b"sealed payload");
         let mut staging = root.stage("model-l", "sealed").unwrap();
         staging.write("model.safetensors", b"primary").unwrap();
         staging.link(&object, "weights/layer.safetensors").unwrap();
+        let before = fs::metadata(object.path()).unwrap();
         let entry = staging.commit().unwrap();
+        let after = fs::metadata(object.path()).unwrap();
+        assert_eq!((before.ctime(), before.ctime_nsec()), (after.ctime(), after.ctime_nsec()));
         for relative in ["model.safetensors", "weights/layer.safetensors"] {
             let metadata = fs::metadata(entry.directory().join(relative)).unwrap();
             assert!(metadata.permissions().readonly(), "{relative} is writable");
