@@ -19,7 +19,8 @@ from ignition.components.recurrent import DeltaMetadata, _commit_convolution
 from ignition.components.vocabulary import PreparedVocabularyProjection
 from ignition.components.kda_speculation import KDARecords, PreparedKDAReplay
 from ignition.preparation.examples import declaration_tensor
-from ignition.preparation.persistent import persistent_copy
+from ignition.preparation.persistent import persistent_copy, persistent_zeros
+from ignition.preparation.tensor_metadata import record_numeric_tensor
 from ignition.preparation.tuning import register_finalizer
 
 from .attention import PreparedMLA
@@ -76,12 +77,17 @@ class DecoderStorage:
     hidden_columns: torch.Tensor
     latent_begin: torch.Tensor
     row_tuning: object = None
+    dual_tc_flags: torch.Tensor | None = None
 
     @classmethod
     def allocate(cls, config, shard, device):
+        n_a = config.text.get("routed_expert_hidden_size", 0) // shard.world_size
+        n_b = config.text.get("num_experts", 0) // shard.world_size
+        flags_n = max(64, (n_a + 15) // 16 + (n_b + 15) // 16)
         return cls(persistent_copy(torch.arange(*shard.partition(config.hidden), device=device)),
             persistent_copy(torch.tensor(shard.partition(config.text["routed_expert_hidden_size"])[:1],
-                                         dtype=torch.int32, device=device)))
+                                         dtype=torch.int32, device=device)),
+            dual_tc_flags=persistent_zeros((flags_n,), torch.uint32, device))
 
 
 @dataclass(frozen=True)
@@ -196,55 +202,117 @@ class PreparedLatentMoE:
             runtime=runtime, coordinator=coordinator, session=session,
             name=name + ".expert_reduce")
         self.row_norm = None
-        if 1 <= work_tokens <= 32 and latent == 3584 and storage.row_tuning is not None:
+        if 1 <= work_tokens <= 64 and latent == 3584 and storage.row_tuning is not None:
             from .row_reductions import RowGeometry
             self.row_norm = storage.row_tuning.register(self.expert_reduce, RowGeometry(latent, rows=work_tokens))
         local_logits = buffer("local_router", weights["router"].shape[0], torch.float32)
-        self.router_projection = UnquantizedProjection(work_source, weights["router"], local_logits,
-            session=session, name=name + ".router").functional(session=session)
         top_k = c["num_experts_per_token"]
         routes = RouterScratch(buffer("selected_logits", top_k, torch.float32),
             buffer("route_ids", top_k, torch.int32),
             buffer("route_weights", top_k, torch.float32).fill_(1 / top_k))
         self.route_gather = self.prefill_route_gather = None
+        self.dual_down_router = None
+        use_dual = False
         if route_runtime is not None and work_tokens <= ROUTE_ROWS:
+            import importlib.util
+            from ignition.components import sm103_projection
+            w_down = weights["latent_down_rows"]
+            w_router = weights["router"]
+            use_dual = (
+                1 <= work_tokens <= 32
+                and hidden % 64 == 0
+                and device.type == "cuda"
+                and not sm103_projection.is_sm103(device)
+                and work_source.dtype == torch.bfloat16
+                and isinstance(w_down, torch.Tensor)
+                and isinstance(w_router, torch.Tensor)
+                and w_down.dtype == torch.bfloat16
+                and w_router.dtype == torch.bfloat16
+                and w_down.is_contiguous()
+                and w_router.is_contiguous()
+                and w_down.data_ptr() % 16 == 0
+                and w_router.data_ptr() % 16 == 0
+                and importlib.util.find_spec("b12x.gemm.bf16_gemv._dual_tc") is not None
+            )
+        if use_dual:
+            from b12x.gemm.bf16_gemv._dual_tc import (
+                compile_dual_tc_projection,
+                dual_tc_flags_numel,
+                dual_tc_scratch_numel,
+                dual_tc_split_k,
+            )
+            w_down = weights["latent_down_rows"]
+            w_router = weights["router"]
+            record_numeric_tensor(w_down)
+            record_numeric_tensor(w_router)
+            n_a, n_b = int(w_down.shape[0]), int(w_router.shape[0])
+            split_k = dual_tc_split_k(n_a, n_b, hidden, work_tokens)
+            flags_needed = dual_tc_flags_numel(n_a, n_b)
+            flags = storage.dual_tc_flags
+            if flags is None or flags.numel() < flags_needed or flags.device != device:
+                flags = persistent_zeros((flags_needed,), torch.uint32, device)
+            # Precompile on the active CUDA context so native export captures the cubin.
+            self._dual_program = compile_dual_tc_projection(
+                int(device.index or 0), work_tokens, split_k, n_a, n_b, hidden
+            )
+            self.dual_down_router = (
+                w_down,
+                w_router,
+                flags,
+                n_a,
+                n_b,
+                work_tokens,
+                split_k,
+                dual_tc_scratch_numel(n_a, n_b, work_tokens, split_k),
+            )
+            self.router_projection = self.down = None
             down_output = buffer("local_down", latent // shard.world_size)
-            self.down = prepare_projection(work_source, weights["latent_down_rows"], down_output,
-                session=session, name=name + ".latent_down_rows", workspace=workspace)
             self.route_gather = PreparedRouteGather(down_output, local_logits, weights["correction"],
                 latent_example, routes.weights, routes.ids, runtime=route_runtime, session=session,
                 coordinator=coordinator, name=name + ".route_gather")
         else:
-            logits = buffer("router", c["num_experts"], torch.float32)
-            if prefill_route_runtime is not None:
+            self.router_projection = UnquantizedProjection(work_source, weights["router"], local_logits,
+                session=session, name=name + ".router").functional(session=session)
+            if route_runtime is not None and work_tokens <= ROUTE_ROWS:
                 down_output = buffer("local_down", latent // shard.world_size)
                 self.down = prepare_projection(work_source, weights["latent_down_rows"], down_output,
                     session=session, name=name + ".latent_down_rows", workspace=workspace)
-                self.prefill_route_gather = PreparedColumnPairGather(down_output, local_logits, latent_example, logits,
-                    runtime=prefill_route_runtime, session=session, coordinator=coordinator,
-                    name=name + ".latent_router_gather",
-                    buffers=examples.setdefault("kimi.moe.paired_columns", {}))
+                self.route_gather = PreparedRouteGather(down_output, local_logits, weights["correction"],
+                    latent_example, routes.weights, routes.ids, runtime=route_runtime, session=session,
+                    coordinator=coordinator, name=name + ".route_gather")
             else:
-                self.down = prepare_projection(buffer("source", hidden // shard.world_size), weights["latent_down"],
-                    buffer("down", latent), session=session, name=name + ".latent_down", workspace=workspace)
-                self.down_reduce = PreparedChunkedAllReduce(self.down.output, latent_example, runtime=runtime,
-                    coordinator=coordinator, session=session, name=name + ".down_reduce").functional(session=session)
-                self.local_experts = local_logits.shape[1]
-                self.router_width = (self.local_experts + 31) // 32 * 32
-                router_input = buffer("router_input", self.router_width, torch.float32)
-                gathered = buffer("gathered_router", self.router_width * shard.world_size, torch.float32)
-                self.router_gather = PreparedChunkedAllGather(router_input.view(torch.bfloat16), gathered.view(torch.bfloat16),
-                    runtime=router_runtime, coordinator=coordinator, session=session,
-                    name=name + ".router_gather").functional(session=session)
-            self.router = PreparedRouter(logits, routes, score_func="sigmoid", correction_bias=weights["correction"],
-                renormalize=True, routed_scaling_factor=c["routed_scaling_factor"], session=session,
-                name=name + ".route").functional(session=session)
+                logits = buffer("router", c["num_experts"], torch.float32)
+                if prefill_route_runtime is not None:
+                    down_output = buffer("local_down", latent // shard.world_size)
+                    self.down = prepare_projection(work_source, weights["latent_down_rows"], down_output,
+                        session=session, name=name + ".latent_down_rows", workspace=workspace)
+                    self.prefill_route_gather = PreparedColumnPairGather(down_output, local_logits, latent_example, logits,
+                        runtime=prefill_route_runtime, session=session, coordinator=coordinator,
+                        name=name + ".latent_router_gather",
+                        buffers=examples.setdefault("kimi.moe.paired_columns", {}))
+                else:
+                    self.down = prepare_projection(buffer("source", hidden // shard.world_size), weights["latent_down"],
+                        buffer("down", latent), session=session, name=name + ".latent_down", workspace=workspace)
+                    self.down_reduce = PreparedChunkedAllReduce(self.down.output, latent_example, runtime=runtime,
+                        coordinator=coordinator, session=session, name=name + ".down_reduce").functional(session=session)
+                    self.local_experts = local_logits.shape[1]
+                    self.router_width = (self.local_experts + 31) // 32 * 32
+                    router_input = buffer("router_input", self.router_width, torch.float32)
+                    gathered = buffer("gathered_router", self.router_width * shard.world_size, torch.float32)
+                    self.router_gather = PreparedChunkedAllGather(router_input.view(torch.bfloat16), gathered.view(torch.bfloat16),
+                        runtime=router_runtime, coordinator=coordinator, session=session,
+                        name=name + ".router_gather").functional(session=session)
+                self.router = PreparedRouter(logits, routes, score_func="sigmoid", correction_bias=weights["correction"],
+                    renormalize=True, routed_scaling_factor=c["routed_scaling_factor"], session=session,
+                    name=name + ".route").functional(session=session)
         self.experts = PreparedRoutedExperts(latent_example, weights["experts"], routes.ids, routes.weights,
             expert_output, workspace=workspace, session=session, name=name + ".experts").functional(session=session)
+        shared_parallel = ()
+        if self.route_gather is not None or (self.prefill_route_gather is not None and not self.pipelined):
+            shared_parallel = ((self.experts.plan, self.up.plan) if self.dual_down_router is not None
+                               else (self.router_projection.plan, self.down.plan, self.experts.plan, self.up.plan))
         self.shared = PreparedMLP(weights["shared"], work_source, session=session, name=name + ".shared", workspace=workspace,
-            parallel_plans=(self.router_projection.plan, self.down.plan, self.experts.plan, self.up.plan)
-            if (self.route_gather is not None or (self.prefill_route_gather is not None and not self.pipelined)) else (),
-            examples=examples)
+            parallel_plans=shared_parallel, examples=examples)
         self.concurrent_expert_reduce = None
         self.all_plans = ()
         if self.pipelined and len(self.expert_reduce.parts) == 1:
@@ -271,18 +339,27 @@ class PreparedLatentMoE:
             self.prefill_route_gather.functional(session=session)
         self.concurrent_down = (ConcurrentProjectionChain((self.down,), parallel_plans=(self.router_projection.plan,),
             session=session, workspace=workspace).functional(session=session)
-            if self.route_gather is not None and workspace is not None and workspace.overlap else None)
-        if self.concurrent_down is None:
+            if self.dual_down_router is None and self.route_gather is not None and workspace is not None and workspace.overlap else None)
+        if self.dual_down_router is None and self.concurrent_down is None:
             self.down.functional(session=session)
 
     def __call__(self, source, *, fuse_add=False):
-        pending_down = None if self.concurrent_down is None else self.concurrent_down.start(source)
-        logits = self.router_projection(source)
-        if self.route_gather is not None:
-            down = (self.down(source) if self.concurrent_down is None else
-                    self.concurrent_down.finish(pending_down, logits))
-        elif self.prefill_route_gather is not None:
-            down = self.down(source)
+        dual = getattr(self, "dual_down_router", None)
+        if dual is not None:
+            from b12x.gemm.bf16_gemv._dual_tc import bf16_dual_gemv_out
+            w_down, w_router, flags, n_a, n_b, max_rows, split_k, scratch_numel = dual
+            down = torch.empty((source.shape[0], n_a), dtype=torch.bfloat16, device=source.device)
+            logits = torch.empty((source.shape[0], n_b), dtype=torch.float32, device=source.device)
+            scratch = torch.empty((scratch_numel,), dtype=torch.float32, device=source.device)
+            bf16_dual_gemv_out(source, w_down, w_router, down, logits, scratch, flags, max_rows, split_k)
+        else:
+            pending_down = None if self.concurrent_down is None else self.concurrent_down.start(source)
+            logits = self.router_projection(source)
+            if self.route_gather is not None:
+                down = (self.down(source) if self.concurrent_down is None else
+                        self.concurrent_down.finish(pending_down, logits))
+            elif self.prefill_route_gather is not None:
+                down = self.down(source)
         pending_shared = self.shared.start(source) if self.shared.concurrent else None
         if self.route_gather is not None:
             latent, ids, route_weights = self.route_gather(down, logits)
@@ -388,15 +465,20 @@ class PreparedDecoder:
                 concurrent_reduce[1].functional(session=session)
             self.layers.append((w, attention, mlp, reduce, concurrent_reduce))
         self.row_mixes = None
-        if 1 <= tokens <= 32 and hidden == 7168 and buffers.row_tuning is not None:
+        if 1 <= tokens <= 64 and hidden == 7168 and buffers.row_tuning is not None:
             from .row_reductions import hidden_row_choices
             self.row_mixes = hidden_row_choices(buffers.row_tuning,
                 [(w, a, m, r) for w, a, m, r, _ in self.layers], config.text["attn_res_block_size"],
                 self.auxiliary_layers if self.auxiliary_stream == "attn_res" else (), self.residual_blocks, rows=tokens)
         self.scoring = None if scoring is None else scoring.prepare(source, weights.head,
             vocabulary=config.text["vocab_size"], session=session, coordinator=coordinator, name=name + ".prompt")
-        self.head = PreparedVocabularyProjection(scratch.hidden, weights.head, scratch.local_logits, scratch.logits,
-            runtime=vocabulary_runtime, coordinator=coordinator, session=session, name=name + ".head").functional(session=session)
+        self.compact_head = scratch.hidden.shape[0] > tokens and scoring is None
+        head_rows = tokens if self.compact_head else scratch.hidden.shape[0]
+        self.head = PreparedVocabularyProjection(scratch.hidden[:head_rows], weights.head,
+            scratch.local_logits[:head_rows], scratch.logits,
+            runtime=vocabulary_runtime, coordinator=coordinator, session=session, name=name + ".head",
+            row_indices=metadata.sample_indices if self.compact_head else None).functional(
+            session=session, dynamic_indices=True)
         self.replay = None
         if mode == "verify":
             indices = kda_records.layers
@@ -545,5 +627,9 @@ class PreparedDecoder:
             output=torch.empty_like(delta), reduction_choice=preceding, addend=preceding_addend)
         if self.scoring is not None:
             self.scoring(hidden)
+        if self.compact_head:
+            logits = self.head(hidden, row_indices=m.sample_indices)
+            sampled = hidden[m.sample_indices]
+            return sampled, logits, auxiliary, (records, d)
         sampled = hidden[m.sample_indices]
         return sampled, self.head(sampled), auxiliary, (records, d)

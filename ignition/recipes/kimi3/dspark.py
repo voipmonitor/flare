@@ -232,40 +232,45 @@ def _draft_stage_kv_windows(
     KV_HEADS: tl.constexpr,
     HEAD_DIM: tl.constexpr,
     PADDED_HEAD_DIM: tl.constexpr,
+    POS_BLOCK: tl.constexpr,
 ):
     r = tl.program_id(0).to(tl.int64)
-    off = tl.program_id(1).to(tl.int64)
+    pblock = tl.program_id(1).to(tl.int64)
     start = tl.load(Starts + r).to(tl.int64)
     length = tl.load(Lengths + r).to(tl.int64)
     prefix = tl.minimum(start, WINDOW)
-    if off == 0:
+    if pblock == 0:
         tl.store(LengthsOut + r, (prefix + length).to(tl.int32))
-    valid = (length > 0) & (off < prefix + length)
-    from_hist = off < prefix
     state_row = tl.load(StateRows + r).to(tl.int64)
-    raw_pos = start - prefix + off
-    hist_pos = ((raw_pos % WINDOW) + WINDOW) % WINDOW
     q_start = tl.load(QStartLoc + r).to(tl.int64)
-    cur_idx = tl.minimum(tl.maximum(q_start + off - prefix, 0), TOKENS - 1)
     d = tl.arange(0, HEAD_DIM)
     zero = tl.zeros((HEAD_DIM,), dtype=tl.bfloat16)
-    for kh in tl.static_range(KV_HEADS):
-        dst_base = (r * CAPACITY + off) * (KV_HEADS * PADDED_HEAD_DIM) + kh * PADDED_HEAD_DIM
-        if valid:
-            if from_hist:
-                k_val = tl.load(KeyHist + state_row * kh_row_stride + hist_pos * kh_pos_stride + kh * kh_head_stride + d)
-                v_val = tl.load(ValHist + state_row * vh_row_stride + hist_pos * vh_pos_stride + kh * vh_head_stride + d)
-            else:
-                k_val = tl.load(CurKey + cur_idx * cur_k_stride + kh * HEAD_DIM + d)
-                v_val = tl.load(QKV + cur_idx * qkv_stride + qkv_v_offset + kh * HEAD_DIM + d)
-            tl.store(StagedK + dst_base + d, k_val)
-            tl.store(StagedV + dst_base + d, v_val)
-        else:
-            tl.store(StagedK + dst_base + d, zero)
-            tl.store(StagedV + dst_base + d, zero)
-        if PADDED_HEAD_DIM > HEAD_DIM:
-            tl.store(StagedK + dst_base + HEAD_DIM + d, zero)
-            tl.store(StagedV + dst_base + HEAD_DIM + d, zero)
+    base_off = pblock * POS_BLOCK
+    for i in tl.static_range(POS_BLOCK):
+        off = base_off + i
+        if off < CAPACITY:
+            valid = (length > 0) & (off < prefix + length)
+            from_hist = off < prefix
+            raw_pos = start - prefix + off
+            hist_pos = ((raw_pos % WINDOW) + WINDOW) % WINDOW
+            cur_idx = tl.minimum(tl.maximum(q_start + off - prefix, 0), TOKENS - 1)
+            for kh in tl.static_range(KV_HEADS):
+                dst_base = (r * CAPACITY + off) * (KV_HEADS * PADDED_HEAD_DIM) + kh * PADDED_HEAD_DIM
+                if valid:
+                    if from_hist:
+                        k_val = tl.load(KeyHist + state_row * kh_row_stride + hist_pos * kh_pos_stride + kh * kh_head_stride + d)
+                        v_val = tl.load(ValHist + state_row * vh_row_stride + hist_pos * vh_pos_stride + kh * vh_head_stride + d)
+                    else:
+                        k_val = tl.load(CurKey + cur_idx * cur_k_stride + kh * HEAD_DIM + d)
+                        v_val = tl.load(QKV + cur_idx * qkv_stride + qkv_v_offset + kh * HEAD_DIM + d)
+                    tl.store(StagedK + dst_base + d, k_val)
+                    tl.store(StagedV + dst_base + d, v_val)
+                else:
+                    tl.store(StagedK + dst_base + d, zero)
+                    tl.store(StagedV + dst_base + d, zero)
+                if PADDED_HEAD_DIM > HEAD_DIM:
+                    tl.store(StagedK + dst_base + HEAD_DIM + d, zero)
+                    tl.store(StagedV + dst_base + HEAD_DIM + d, zero)
 
 
 @triton.jit
@@ -540,14 +545,15 @@ class DraftAttention(torch.nn.Module):
             staged_key = torch.empty(self.window_shape, dtype=hidden_states.dtype, device=hidden_states.device)
             staged_value = torch.empty(self.window_shape, dtype=hidden_states.dtype, device=hidden_states.device)
             lengths = torch.empty((rows,), dtype=torch.int32, device=hidden_states.device)
-            torch.library.wrap_triton(_draft_stage_kv_windows)[(rows, capacity)](
+            pos_block = 16
+            torch.library.wrap_triton(_draft_stage_kv_windows)[(rows, triton.cdiv(capacity, pos_block))](
                 self.key_cache, self.value_cache, key, qkv, m.starts, m.lengths, m.state_rows, m.query_start_loc,
                 staged_key, staged_value, lengths,
                 self.key_cache.stride(0), self.key_cache.stride(1), self.key_cache.stride(2),
                 self.value_cache.stride(0), self.value_cache.stride(1), self.value_cache.stride(2),
                 key.stride(0), qkv.stride(0), q_width + kv_width,
                 TOKENS=tokens, WINDOW=self.window, CAPACITY=capacity, KV_HEADS=kv_heads,
-                HEAD_DIM=width, PADDED_HEAD_DIM=PADDED_HEAD, num_warps=2)
+                HEAD_DIM=width, PADDED_HEAD_DIM=PADDED_HEAD, POS_BLOCK=pos_block, num_warps=2)
             attended = self.attention(query, k_cache=staged_key, v_cache=staged_value,
                                       cache_seqlens=lengths, cu_seqlens_q=m.query_start_loc)
             if PADDED_HEAD == width:
@@ -608,7 +614,7 @@ class PreparedDraft:
             num_rows=metadata.live_counts[:1], session=session, name=name + ".embedding").functional(session=session, dynamic_inputs=True)
         self.layers = []
         tokens = scratch.embedding.shape[0]
-        use_row_tuning = row_tuning is not None and 1 <= tokens <= 32 and config.hidden == 7168
+        use_row_tuning = row_tuning is not None and 1 <= tokens <= 64 and config.hidden == 7168
         self.row_choices = [] if use_row_tuning else None
         if use_row_tuning:
             from .row_reductions import RowGeometry
