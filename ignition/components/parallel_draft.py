@@ -187,8 +187,8 @@ class PreparedParallelDraftRound:
         head = getattr(getattr(o.weights, "draft", None), "markov_head", None)
         from .markov_sampling import RowScaledFP8MarkovWeight
 
-        # Full-vocabulary transition fusion shares transition weight loads across b=1,2,4 rows.
-        fuse_markov = (b in (1, 2, 4) and w > 1 and self.generate_proposals
+        # Full-vocabulary transition fusion shares transition weight loads across b=1,2,4,8 rows.
+        fuse_markov = (b in (1, 2, 4, 8) and w > 1 and self.generate_proposals
             and getattr(o, "block_proposal_broadcast", False) and o.markov_runtime is None
             and self.selector is None and self.markov is not None
             and ((isinstance(head, torch.Tensor) and head.dtype == torch.bfloat16 and head.is_contiguous())

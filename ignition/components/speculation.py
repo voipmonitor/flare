@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import torch
+import triton
+import triton.language as tl
 
 from ignition.components.flashinfer_sampling import filter_probabilities_out, probability_filter_workspace_size, verify_chain
 
@@ -39,6 +41,123 @@ DRAFT_RNG_DOMAIN = 0x4D54505F44524146
 # Vocabulary-wide checks reduce each row in slices first, so compiled forwards spread
 # them over many programs instead of one serial program per row.
 VOCABULARY_SLICES = 128
+_SCORE_BLOCK = 4096
+
+
+@triton.jit
+def _target_scores_kernel(
+    Logits, Histogram, Candidates, Slots, Params, GrammarMask, GrammarEnabled,
+    Scores, BlockMax,
+    hist_stride, mask_row_stride, mask_col_stride, candidate_stride,
+    CAPACITY: tl.constexpr, WIDTH: tl.constexpr, V: tl.constexpr,
+    PREFIX_OFFSET: tl.constexpr, MAX_PREFIX: tl.constexpr,
+    HAS_3D_GRAMMAR: tl.constexpr, BLOCK: tl.constexpr, BLOCKS: tl.constexpr,
+):
+    pid0 = tl.program_id(0)
+    block = tl.program_id(1)
+    row = pid0 // WIDTH
+    col = pid0 % WIDTH
+    prefix = col + PREFIX_OFFSET
+    safe = tl.minimum(tl.maximum(tl.load(Slots + row).to(tl.int64), 0), CAPACITY - 1)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < V
+    score = tl.load(Logits + pid0.to(tl.int64) * V + token, mask=inside, other=0.).to(tl.float32)
+    temperature = tl.load(Params + safe * 6)
+    repetition = tl.load(Params + safe * 6 + 3)
+    presence = tl.load(Params + safe * 6 + 4)
+    frequency = tl.load(Params + safe * 6 + 5)
+    neutral = (
+        (repetition == 1.)
+        & (presence.to(tl.int32, bitcast=True) == 0)
+        & (frequency.to(tl.int32, bitcast=True) == 0)
+    )
+    if not neutral:
+        count = tl.load(Histogram + safe * hist_stride + token, mask=inside, other=0)
+        for idx in tl.static_range(MAX_PREFIX):
+            if idx < prefix:
+                cand = tl.load(Candidates + row * candidate_stride + idx)
+                count += ((token == cand) & (cand >= 0) & (cand < V)).to(tl.int32)
+        adjusted = tl.where(score > 0, tl.math.div_rn(score, repetition), score * repetition)
+        score = tl.where(count > 0, adjusted, score)
+        score = score - (count > 0).to(tl.float32) * presence - count.to(tl.float32) * frequency
+    score = tl.math.div_rn(score, tl.where(temperature > 0, temperature, 1.))
+    if tl.load(GrammarEnabled + safe) != 0:
+        if HAS_3D_GRAMMAR:
+            word = tl.load(
+                GrammarMask + safe * mask_row_stride + prefix.to(tl.int64) * mask_col_stride + token // 32,
+                mask=inside, other=0,
+            )
+        else:
+            word = tl.load(GrammarMask + safe * mask_row_stride + token // 32, mask=inside, other=0)
+        score = tl.where(((word >> (token % 32)) & 1) != 0, score, -float("inf"))
+    tl.store(Scores + pid0.to(tl.int64) * V + token, score, mask=inside)
+    has_nan = tl.max((inside & (score != score)).to(tl.int32), 0)
+    maximum = tl.where(has_nan != 0, float("nan"), tl.max(tl.where(inside, score, -float("inf")), 0))
+    tl.store(BlockMax + pid0 * BLOCKS + block, maximum)
+
+
+@triton.jit
+def _selected_row(Slots, Generations, Generation, live_rows, row, CAPACITY: tl.constexpr, BATCH: tl.constexpr):
+    slot = tl.load(Slots + row).to(tl.int64)
+    safe = tl.minimum(tl.maximum(slot, 0), CAPACITY - 1)
+    selected = (row < live_rows) & (live_rows >= 0) & (live_rows <= BATCH) & (slot >= 0) & (slot < CAPACITY)
+    return selected & (tl.load(Generation + safe) == tl.load(Generations + row)), slot, safe
+
+
+@triton.jit
+def _target_scores_finish(
+    BlockMax, Candidates, Slots, Generations, LiveRows, Generation, Status, TopK,
+    Params, GrammarEnabled, GrammarMaskCount, Maximum, Valid, PackedTopK, PackedTopP,
+    candidate_stride, CAPACITY: tl.constexpr, BATCH: tl.constexpr, WIDTH: tl.constexpr,
+    V: tl.constexpr, PREFIX_OFFSET: tl.constexpr, MAX_PREFIX: tl.constexpr,
+    HAS_3D_GRAMMAR: tl.constexpr, GRAMMAR_ROWS: tl.constexpr,
+    BLOCKS: tl.constexpr, BLOCK_COUNT: tl.constexpr, RUNNING_STATE: tl.constexpr,
+):
+    pid0 = tl.program_id(0)
+    row = pid0 // WIDTH
+    col = pid0 % WIDTH
+    prefix = col + PREFIX_OFFSET
+    block = tl.arange(0, BLOCK_COUNT)
+    maxima = tl.load(BlockMax + pid0 * BLOCKS + block, mask=block < BLOCKS, other=-float("inf"))
+    has_nan = tl.max(((block < BLOCKS) & (maxima != maxima)).to(tl.int32), 0)
+    maximum = tl.where(has_nan != 0, float("nan"), tl.max(maxima, 0))
+    live_rows = tl.load(LiveRows)
+    selected, slot, safe = _selected_row(Slots, Generations, Generation, live_rows, row, CAPACITY, BATCH)
+    sharing = 0
+    for other in tl.static_range(BATCH):
+        other_selected, other_slot, _ = _selected_row(Slots, Generations, Generation, live_rows, other, CAPACITY, BATCH)
+        sharing += (other_selected & (other_slot == slot)).to(tl.int32)
+    live = selected & (sharing <= 1) & (tl.load(Status + safe) == RUNNING_STATE)
+    prefix_valid = True
+    for idx in tl.static_range(MAX_PREFIX):
+        if idx < prefix:
+            cand = tl.load(Candidates + row * candidate_stride + idx)
+            prefix_valid &= (cand >= 0) & (cand < V)
+    finite = (maximum == maximum) & (tl.abs(maximum) < float("inf"))
+    valid = live & prefix_valid & finite
+    gram_en = tl.load(GrammarEnabled + safe) != 0
+    if HAS_3D_GRAMMAR:
+        cnt = tl.load(GrammarMaskCount + safe)
+        valid &= (~gram_en) | ((prefix < cnt) & (cnt <= GRAMMAR_ROWS))
+    elif WIDTH > 1:
+        valid &= (~gram_en) | (prefix == 0)
+    tl.store(Maximum + pid0, maximum)
+    tl.store(Valid + pid0, valid)
+    top_k = tl.load(TopK + safe)
+    tl.store(PackedTopK + pid0, tl.where(top_k > 0, top_k, V))
+    tl.store(PackedTopP + pid0, tl.load(Params + safe * 6 + 1))
+
+
+@triton.jit
+def _mask_invalid_scores(Scores, Valid, V: tl.constexpr, BLOCK: tl.constexpr):
+    pid0 = tl.program_id(0)
+    if tl.load(Valid + pid0) != 0:
+        return
+    block = tl.program_id(1)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < V
+    val = tl.where(token == 0, 0., -float("inf"))
+    tl.store(Scores + pid0.to(tl.int64) * V + token, val, mask=inside)
 
 
 def _sliced(values: torch.Tensor) -> torch.Tensor:
@@ -186,12 +305,47 @@ class PreparedSpeculativeDistributions:
 
     def _prepare_scores(self, scratch, logits, *, candidates=None, slots=None, generations=None, live_rows=None):
         state = self.state
+        candidates = self.candidates if candidates is None else candidates
+        slots = self.slots if slots is None else slots
+        generations = self.generations if generations is None else generations
+        live_rows = self.live_rows if live_rows is None else live_rows
+        if logits.device.type == "cuda":
+            batch, width, vocab = logits.shape
+            blocks = triton.cdiv(vocab, _SCORE_BLOCK)
+            block_count = max(16, triton.next_power_of_2(blocks))
+            max_prefix = width - 1 + self.prefix_offset
+            has_3d = self.grammar_masks is not None
+            gmask = self.grammar_masks if has_3d else state.grammar_mask
+            gcount = self.grammar_mask_count if has_3d else slots
+            g_row_stride = gmask.stride(0)
+            g_col_stride = gmask.stride(1) if has_3d else 0
+            g_rows = gmask.shape[1] if has_3d else 0
+            block_max = torch.empty((batch * width, blocks), dtype=torch.float32, device=logits.device)
+            torch.library.wrap_triton(_target_scores_kernel)[(batch * width, blocks)](
+                logits, state.histogram, candidates, slots, state.parameters,
+                gmask, state.grammar_enabled, scratch["scores"], block_max,
+                state.histogram.stride(0), g_row_stride, g_col_stride, candidates.stride(0),
+                CAPACITY=state.capacity, WIDTH=width, V=vocab,
+                PREFIX_OFFSET=self.prefix_offset, MAX_PREFIX=max_prefix,
+                HAS_3D_GRAMMAR=has_3d, BLOCK=_SCORE_BLOCK, BLOCKS=blocks,
+                enable_fp_fusion=False,
+            )
+            torch.library.wrap_triton(_target_scores_finish)[(batch * width,)](
+                block_max, candidates, slots, generations, live_rows,
+                state.generation, state.status, state.top_k, state.parameters,
+                state.grammar_enabled, gcount,
+                scratch["maximum"], scratch["valid"],
+                scratch["packed_top_k"], scratch["packed_top_p"],
+                candidates.stride(0), CAPACITY=state.capacity, BATCH=batch,
+                WIDTH=width, V=vocab, PREFIX_OFFSET=self.prefix_offset,
+                MAX_PREFIX=max_prefix, HAS_3D_GRAMMAR=has_3d, GRAMMAR_ROWS=g_rows,
+                BLOCKS=blocks, BLOCK_COUNT=block_count, RUNNING_STATE=RUNNING,
+            )
+            safe = slots.long().clamp(0, state.capacity - 1)
+            return safe, state.parameters[safe]
         rows = self.rows if self.rows is not None else torch.arange(logits.shape[0], device=logits.device)
         columns = self.columns if self.columns is not None else torch.arange(logits.shape[1], device=logits.device)
-        candidates = self.candidates if candidates is None else candidates
-        safe, live = _live(state, self.slots if slots is None else slots,
-                           self.generations if generations is None else generations,
-                           self.live_rows if live_rows is None else live_rows, rows)
+        safe, live = _live(state, slots, generations, live_rows, rows)
         counts = state.histogram[safe, None, :]
         prefix = columns + self.prefix_offset
         prefix_valid = torch.ones_like(scratch["valid"])
@@ -267,8 +421,14 @@ class PreparedSpeculativeDistributions:
         _, params = self._prepare_scores(scratch, logits, candidates=candidates, slots=slots, generations=generations, live_rows=live_rows)
         scores, valid = scratch["scores"], scratch["valid"]
         probabilities = scratch["probabilities"]
-        dummy = torch.where(self.vocab_ids == 0, 0., -torch.inf)
-        scores.copy_(torch.where(valid[:, :, None], scores, dummy))
+        if logits.device.type == "cuda":
+            batch, width, vocab = logits.shape
+            torch.library.wrap_triton(_mask_invalid_scores)[(batch * width, triton.cdiv(vocab, _SCORE_BLOCK))](
+                scores, valid, V=vocab, BLOCK=_SCORE_BLOCK,
+            )
+        else:
+            dummy = torch.where(self.vocab_ids == 0, 0., -torch.inf)
+            scores.copy_(torch.where(valid[:, :, None], scores, dummy))
         flat = scores.view(-1, self.state.vocab_size)
         library_scratch = self.library_scratch
         if library_scratch is None:

@@ -682,6 +682,158 @@ def _markov_step_batched4(
 
 
 @triton.jit
+def _markov_step_batched8(
+    Base,
+    Embed,
+    Head,
+    HeadScale,
+    Pending,
+    Tokens,
+    Scores,
+    LseMax,
+    LseSum,
+    Bad,
+    PreviousMax,
+    PreviousArg,
+    Maximum,
+    Arg,
+    Seeds,
+    Offsets,
+    Histogram,
+    Slots,
+    Generations,
+    LiveRows,
+    Generation,
+    Status,
+    Params,
+    Grammar,
+    GrammarEnabled,
+    base_row_stride,
+    base_step_stride,
+    hist_stride,
+    mask_stride,
+    V: tl.constexpr,
+    RANK: tl.constexpr,
+    DEPTH: tl.constexpr,
+    STEP: tl.constexpr,
+    BLOCKS: tl.constexpr,
+    PAD: tl.constexpr,
+    CAPACITY: tl.constexpr,
+    BATCH: tl.constexpr,
+    RUNNING: tl.constexpr,
+    BLOCK: tl.constexpr,
+    CHUNK: tl.constexpr,
+    FP8: tl.constexpr,
+):
+    block = tl.program_id(0)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < V
+    if STEP == 0:
+        p0 = tl.minimum(tl.maximum(tl.load(Pending + 0), 0), V - 1)
+        p1 = tl.minimum(tl.maximum(tl.load(Pending + 1), 0), V - 1)
+        p2 = tl.minimum(tl.maximum(tl.load(Pending + 2), 0), V - 1)
+        p3 = tl.minimum(tl.maximum(tl.load(Pending + 3), 0), V - 1)
+        p4 = tl.minimum(tl.maximum(tl.load(Pending + 4), 0), V - 1)
+        p5 = tl.minimum(tl.maximum(tl.load(Pending + 5), 0), V - 1)
+        p6 = tl.minimum(tl.maximum(tl.load(Pending + 6), 0), V - 1)
+        p7 = tl.minimum(tl.maximum(tl.load(Pending + 7), 0), V - 1)
+    else:
+        p0 = tl.minimum(tl.maximum(tl.load(Tokens + 0 * DEPTH + STEP - 1), 0), V - 1)
+        p1 = tl.minimum(tl.maximum(tl.load(Tokens + 1 * DEPTH + STEP - 1), 0), V - 1)
+        p2 = tl.minimum(tl.maximum(tl.load(Tokens + 2 * DEPTH + STEP - 1), 0), V - 1)
+        p3 = tl.minimum(tl.maximum(tl.load(Tokens + 3 * DEPTH + STEP - 1), 0), V - 1)
+        p4 = tl.minimum(tl.maximum(tl.load(Tokens + 4 * DEPTH + STEP - 1), 0), V - 1)
+        p5 = tl.minimum(tl.maximum(tl.load(Tokens + 5 * DEPTH + STEP - 1), 0), V - 1)
+        p6 = tl.minimum(tl.maximum(tl.load(Tokens + 6 * DEPTH + STEP - 1), 0), V - 1)
+        p7 = tl.minimum(tl.maximum(tl.load(Tokens + 7 * DEPTH + STEP - 1), 0), V - 1)
+    if RANK >= 64:
+        acc = tl.zeros((BLOCK, 16), dtype=tl.float32)
+        cols = tl.arange(0, 16)
+        c0 = cols == 0
+        c1 = cols == 1
+        c2 = cols == 2
+        c3 = cols == 3
+        c4 = cols == 4
+        c5 = cols == 5
+        c6 = cols == 6
+        c7 = cols == 7
+        zeros_e = tl.full((CHUNK, 16), 0.0, tl.bfloat16)
+        for start in tl.static_range(0, RANK, CHUNK):
+            column = start + tl.arange(0, CHUNK)
+            weights = tl.load(Head + token[:, None].to(tl.int64) * RANK + column[None, :],
+                              inside[:, None], other=0.0).to(tl.bfloat16)
+            e0 = tl.load(Embed + p0.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e1 = tl.load(Embed + p1.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e2 = tl.load(Embed + p2.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e3 = tl.load(Embed + p3.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e4 = tl.load(Embed + p4.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e5 = tl.load(Embed + p5.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e6 = tl.load(Embed + p6.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e7 = tl.load(Embed + p7.to(tl.int64) * RANK + column).to(tl.bfloat16)
+            e = tl.where(
+                c0[None, :], e0[:, None],
+                tl.where(
+                    c1[None, :], e1[:, None],
+                    tl.where(
+                        c2[None, :], e2[:, None],
+                        tl.where(
+                            c3[None, :], e3[:, None],
+                            tl.where(
+                                c4[None, :], e4[:, None],
+                                tl.where(
+                                    c5[None, :], e5[:, None],
+                                    tl.where(
+                                        c6[None, :], e6[:, None],
+                                        tl.where(c7[None, :], e7[:, None], zeros_e),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            acc = tl.dot(weights, e, acc, out_dtype=tl.float32)
+        if FP8:
+            scale = tl.load(HeadScale + token, inside, other=0.0).to(tl.float32)
+            acc *= scale[:, None]
+        for r_idx in tl.static_range(8):
+            pr = (
+                p0 if r_idx == 0 else (
+                p1 if r_idx == 1 else (
+                p2 if r_idx == 2 else (
+                p3 if r_idx == 3 else (
+                p4 if r_idx == 4 else (
+                p5 if r_idx == 5 else (
+                p6 if r_idx == 6 else p7))))))
+            )
+            br = tl.sum(tl.where((cols == r_idx)[None, :], acc, 0.0), axis=1)
+            _finish_markov_row(
+                r_idx, pr, br, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+                Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+                base_row_stride, base_step_stride, hist_stride, mask_stride,
+                block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+            )
+    else:
+        for r_idx in tl.static_range(8):
+            pr = (
+                p0 if r_idx == 0 else (
+                p1 if r_idx == 1 else (
+                p2 if r_idx == 2 else (
+                p3 if r_idx == 3 else (
+                p4 if r_idx == 4 else (
+                p5 if r_idx == 5 else (
+                p6 if r_idx == 6 else p7))))))
+            )
+            br = _transition_bias(Embed, Head, HeadScale, pr, token, inside, RANK, CHUNK, BLOCK, FP8)
+            _finish_markov_row(
+                r_idx, pr, br, Base, Tokens, Scores, LseMax, LseSum, Bad, Maximum, Arg,
+                Seeds, Offsets, Histogram, Slots, Params, Grammar, GrammarEnabled,
+                base_row_stride, base_step_stride, hist_stride, mask_stride,
+                block, token, inside, V, DEPTH, STEP, BLOCKS, CAPACITY, BLOCK,
+            )
+
+
+@triton.jit
 def _markov_step(
     Base,
     Embed,
@@ -961,7 +1113,8 @@ class PreparedMarkovProposals:
         self.tokens, self.probabilities, self.valid = tokens, probabilities, valid
         self.state, self.slots, self.generations, self.live_rows = (requests, slots, generations, live_rows)
         self.seeds, self.offsets = seeds, offsets
-        self.batch, self.depth, self.vocab, self.block = batch, depth, vocab, 128
+        self.batch, self.depth, self.vocab = batch, depth, vocab
+        self.block = 128
         self.scratch = bind_scratch(self.scratch_layout(batch, depth, vocab, block=self.block), device=base.device, workspace=workspace)
         self.kernels = None
 
@@ -971,7 +1124,8 @@ class PreparedMarkovProposals:
         b, d, v, block = self.batch, self.depth, self.vocab, self.block
         n = triton.cdiv(v, block)
         rank = self.head_values.shape[1]
-        chunk = 128 if (b in (2, 4) and rank >= 128 and rank % 128 == 0) else 64
+        chunk = 128 if (b in (2, 4, 8) and rank >= 128 and rank % 128 == 0) else 64
+        step_warps = 2 if (b in (4, 8) and rank >= 256) else 4
         common = dict(
             V=v,
             RANK=rank,
@@ -984,13 +1138,16 @@ class PreparedMarkovProposals:
             BLOCK=block,
             CHUNK=chunk,
             FP8=self.head_scale is not None,
-            num_warps=4,
+            num_warps=step_warps,
             enable_fp_fusion=False,
         )
         kernels = []
         s = self.scratch
-        self.pre_resolve = b == 4 or (b > 1 and b % 2 == 0)
-        if b == 4:
+        self.pre_resolve = b in (4, 8) or (b > 1 and b % 2 == 0)
+        if b == 8:
+            step_kernel = _markov_step_batched8
+            step_grid = (n, 1, 1)
+        elif b == 4:
             step_kernel = _markov_step_batched4
             step_grid = (n, 1, 1)
         elif b % 2 == 0:

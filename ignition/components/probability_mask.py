@@ -9,22 +9,30 @@ import triton.language as tl
 
 from ignition.preparation.triton import launch_triton, prepare_triton
 
+_MASK_BLOCK = 4096
+
 
 @triton.jit
 def _mask_probabilities(Source, Destination, Valid, Limits, Dummy,
-                        ELEMENTS: tl.constexpr, COLUMNS: tl.constexpr, VOCAB: tl.constexpr,
+                        COLUMNS: tl.constexpr, VOCAB: tl.constexpr,
                         LIMITED: tl.constexpr, LIMIT_OFFSET: tl.constexpr, BLOCK: tl.constexpr):
-    index = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-    inside = index < ELEMENTS
-    row = index // (COLUMNS * VOCAB)
-    column = index // VOCAB % COLUMNS
-    valid = tl.load(Valid + row, inside, other=0).to(tl.int1)
+    row_col = tl.program_id(0)
+    block = tl.program_id(1)
+    row = row_col // COLUMNS
+    column = row_col % COLUMNS
+    valid = tl.load(Valid + row).to(tl.int1)
     if LIMITED:
-        limit = tl.load(Limits + row, inside, other=0)
+        limit = tl.load(Limits + row)
         valid = valid & (column < limit - LIMIT_OFFSET)
-    value = tl.load(Source + index, inside & valid, other=0)
-    dummy = tl.load(Dummy + index % VOCAB, inside, other=0)
-    tl.store(Destination + index, tl.where(valid, value, dummy), inside)
+    token = block * BLOCK + tl.arange(0, BLOCK)
+    inside = token < VOCAB
+    offset = row_col.to(tl.int64) * VOCAB + token
+    if valid:
+        value = tl.load(Source + offset, inside, other=0.)
+        tl.store(Destination + offset, value, inside)
+    else:
+        dummy = tl.load(Dummy + token, inside, other=0.)
+        tl.store(Destination + offset, dummy, inside)
 
 
 class PreparedProbabilityMask:
@@ -57,10 +65,10 @@ class PreparedProbabilityMask:
         self.kernel = prepare_triton(_mask_probabilities,
             (self.source if self.snapshot is None else self.snapshot, self.destination, self.valid,
              self.valid if self.limits is None else self.limits, self.dummy),
-            (triton.cdiv(batch * columns * vocab, 512), 1, 1),
-            ELEMENTS=batch * columns * vocab, COLUMNS=columns, VOCAB=vocab,
+            (batch * columns, triton.cdiv(vocab, _MASK_BLOCK), 1),
+            COLUMNS=columns, VOCAB=vocab,
             LIMITED=self.limits is not None, LIMIT_OFFSET=self.limit_offset,
-            BLOCK=512, num_warps=8)
+            BLOCK=_MASK_BLOCK, num_warps=8)
 
     def stage(self):
         if self.snapshot is not None:
