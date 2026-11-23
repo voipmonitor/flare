@@ -53,11 +53,37 @@ pub(super) struct PackedRoundShape {
     pub nanos: u64,
 }
 
+const PREFILL_HISTORY_BANDS: usize = 6;
+
+/// Logarithmic KV-history bands for prefill duration estimation:
+/// 0: [0, 16k), 1: [16k, 32k), 2: [32k, 64k), 3: [64k, 128k), 4: [128k, 256k), 5: [256k, ..).
+fn prefill_history_band(start_position: u64) -> usize {
+    if start_position < 16_384 {
+        0
+    } else {
+        (1 + (start_position / 16_384).ilog2() as usize).min(PREFILL_HISTORY_BANDS - 1)
+    }
+}
+
+#[derive(Default)]
+struct BandEstimate {
+    nanos: u64,
+    replays: ReplayTimes,
+    observed_at_ns: u64,
+}
+
+impl BandEstimate {
+    fn fresh(&self, now_ns: u64, ttl_ns: u64) -> bool {
+        self.nanos != 0 && now_ns.saturating_sub(self.observed_at_ns) < ttl_ns
+    }
+}
+
 struct Estimate {
     nanos: u64,
     replays: ReplayTimes,
     observed_at_ns: u64,
     last_attempt_ns: u64,
+    history_bands: [BandEstimate; PREFILL_HISTORY_BANDS],
 }
 
 #[derive(Default)]
@@ -120,6 +146,13 @@ impl ActionCosts {
         estimate.nanos = nanos;
         estimate.replays.observe(nanos, false);
         estimate.observed_at_ns = self.now_ns;
+        estimate.history_bands = Default::default();
+        if key.kind.is_prefill() && nanos > 0 {
+            let band = &mut estimate.history_bands[0];
+            band.nanos = nanos;
+            band.replays.observe(nanos, false);
+            band.observed_at_ns = self.now_ns;
+        }
         self.refresh_packed_durations();
     }
 
@@ -145,6 +178,7 @@ impl ActionCosts {
                     replays: ReplayTimes::default(),
                     observed_at_ns: 0,
                     last_attempt_ns: 0,
+                    history_bands: Default::default(),
                 },
             ));
         }
@@ -163,6 +197,78 @@ impl ActionCosts {
 
     pub fn duration(&self, kind: GraphKind, batch: usize, tokens: usize) -> Option<u64> {
         self.shape_duration(kind, batch, tokens, 0)
+    }
+
+    pub fn prefill_duration(
+        &self,
+        kind: GraphKind,
+        tokens: usize,
+        start_position: u64,
+    ) -> Option<u64> {
+        let estimate = self.entry(Key {
+            drafts: 0,
+            kind,
+            batch: 1,
+            tokens,
+            prefill: 0,
+            packed: 0,
+        })?;
+        if estimate.nanos == 0 {
+            return Some(0);
+        }
+        let band = prefill_history_band(start_position);
+        if estimate.history_bands[band].nanos > 0 {
+            return Some(estimate.history_bands[band].nanos);
+        }
+        let mut src: Option<(usize, u64)> = None;
+        for b in 0..PREFILL_HISTORY_BANDS {
+            let ns = estimate.history_bands[b].nanos;
+            if ns > 0 && src.is_none_or(|(old_b, _)| b.abs_diff(band) < old_b.abs_diff(band)) {
+                src = Some((b, ns));
+            }
+        }
+        let (src_band, src_ns) = src.unwrap_or((0, estimate.nanos));
+        if src_band == band {
+            return Some(src_ns);
+        }
+        // When scaling upward (`band > src_band`), only peers with strictly larger capacity
+        // supply a valid slowdown lower bound (smaller chunks amortize per-launch KV overhead
+        // less effectively at long context). This prevents both a downward spiral onto stale
+        // short-context smaller chunks AND trapping on a smaller chunk without testing larger ones.
+        let mut peer: Option<(usize, u64, u64)> = None;
+        for (peer_key, peer_est) in &self.entries {
+            if peer_key.kind != kind || peer_key.batch != 1 || peer_key.prefill != 0 {
+                continue;
+            }
+            if band > src_band && peer_key.tokens <= tokens {
+                continue;
+            }
+            let target_ns = peer_est.history_bands[band].nanos;
+            let base_ns = if src_band == 0 && peer_est.history_bands[0].nanos == 0 {
+                peer_est.nanos
+            } else {
+                peer_est.history_bands[src_band].nanos
+            };
+            if target_ns > 0
+                && base_ns > 0
+                && peer.is_none_or(|(old_tokens, _, _)| peer_key.tokens > old_tokens)
+            {
+                peer = Some((peer_key.tokens, target_ns, base_ns));
+            }
+        }
+        let Some((_, target_ns, base_ns)) = peer else {
+            return Some(src_ns);
+        };
+        let (num, den) = if band > src_band {
+            (target_ns.max(base_ns), base_ns)
+        } else {
+            (target_ns.min(base_ns), base_ns)
+        };
+        let scaled = ((u128::from(src_ns) * u128::from(num) + u128::from(den) / 2)
+            / u128::from(den))
+            .max(1)
+            .min(u128::from(u64::MAX)) as u64;
+        Some(scaled)
     }
 
     fn refresh_packed_durations(&mut self) {
@@ -277,16 +383,103 @@ impl ActionCosts {
         if let Some(&index) = self.index.get(&key) {
             let estimate = &mut self.entries[index].1;
             let fresh = estimate.fresh(self.now_ns, self.ttl_ns);
-            estimate.nanos = estimate.replays.observe(sample, fresh);
-            estimate.observed_at_ns = self.now_ns;
-            self.refresh_packed_durations();
+            if key.kind.is_prefill() {
+                let start_position = step.lanes.first().map_or(0, |lane| lane.start_position);
+                let band = prefill_history_band(start_position);
+                let band_estimate = &mut estimate.history_bands[band];
+                let band_fresh = band_estimate.fresh(self.now_ns, self.ttl_ns);
+                band_estimate.nanos = band_estimate.replays.observe(sample, band_fresh);
+                band_estimate.observed_at_ns = self.now_ns;
+                if band == 0 || estimate.nanos == 0 {
+                    estimate.nanos = estimate.replays.observe(sample, fresh);
+                }
+                estimate.observed_at_ns = self.now_ns;
+            } else {
+                estimate.nanos = estimate.replays.observe(sample, fresh);
+                estimate.observed_at_ns = self.now_ns;
+                self.refresh_packed_durations();
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ReplayTimes;
+    use super::{ActionCosts, ReplayTimes, prefill_history_band};
+    use crate::{
+        execution::{ExecutionTiming, GraphDescriptor, GraphKind, SamplingMode},
+        scheduler::{RequestHandle, ScheduledLane, ScheduledStep},
+    };
+
+    fn prefill_graph(kind: GraphKind, tokens: usize) -> GraphDescriptor {
+        GraphDescriptor {
+            tuned_bindings: vec![],
+            confidence_width: 0,
+            draft_tokens: 0,
+            packed_token_capacity: 0,
+            name: format!("{kind:?}-{tokens}"),
+            kind,
+            sampling_mode: SamplingMode::General,
+            handle: 1,
+            batch_capacity: 1,
+            token_capacity: tokens,
+            prefill_capacity: 0,
+            estimated_duration_ns: 0,
+            input_bindings: vec![],
+        }
+    }
+
+    fn prefill_step(kind: GraphKind, tokens: usize, start_position: u64) -> ScheduledStep {
+        ScheduledStep {
+            draft_tokens: 0,
+            packed_token_capacity: 0,
+            kind,
+            batch_capacity: 1,
+            token_capacity: tokens,
+            mixed: None,
+            lanes: vec![ScheduledLane {
+                request: RequestHandle { slot: 0, generation: 1 },
+                start_position,
+                tokens,
+            }],
+            requires_feedback: true,
+        }
+    }
+
+    fn gpu_timing(ns: u64) -> ExecutionTiming {
+        let mut gpu_ns = [None; 16];
+        gpu_ns[0] = Some(ns);
+        ExecutionTiming { gpu_ns, readiness: None, wall_ns: ns, queued: false }
+    }
+
+    #[test]
+    fn long_context_prefill_observations_do_not_pollute_short_band_and_scale_unmeasured_peers() {
+        assert_eq!(prefill_history_band(0), 0);
+        assert_eq!(prefill_history_band(16_383), 0);
+        assert_eq!(prefill_history_band(16_384), 1);
+        assert_eq!(prefill_history_band(32_768), 2);
+        assert_eq!(prefill_history_band(65_536), 3);
+        assert_eq!(prefill_history_band(131_072), 4);
+
+        let graphs = vec![
+            prefill_graph(GraphKind::Prefill, 4096),
+            prefill_graph(GraphKind::Prefill, 8192),
+        ];
+        let mut costs = ActionCosts::prepared(&graphs, 16).unwrap();
+        costs.observe(&prefill_step(GraphKind::Prefill, 4096, 0), gpu_timing(110_000_000));
+        costs.observe(&prefill_step(GraphKind::Prefill, 8192, 0), gpu_timing(210_000_000));
+        for _ in 0..9 {
+            costs.observe(&prefill_step(GraphKind::Prefill, 8192, 80_000), gpu_timing(252_000_000));
+        }
+        assert_eq!(costs.prefill_duration(GraphKind::Prefill, 8192, 0), Some(210_000_000));
+        assert_eq!(costs.prefill_duration(GraphKind::Prefill, 4096, 0), Some(110_000_000));
+        assert_eq!(costs.prefill_duration(GraphKind::Prefill, 8192, 80_000), Some(252_000_000));
+        assert_eq!(costs.prefill_duration(GraphKind::Prefill, 4096, 80_000), Some(132_000_000));
+
+        costs.observe(&prefill_step(GraphKind::Prefill, 4096, 140_000), gpu_timing(160_000_000));
+        assert_eq!(costs.prefill_duration(GraphKind::Prefill, 4096, 140_000), Some(160_000_000));
+        assert_eq!(costs.prefill_duration(GraphKind::Prefill, 8192, 140_000), Some(252_000_000));
+    }
 
     #[test]
     fn isolated_slow_replay_does_not_displace_the_steady_cost() {

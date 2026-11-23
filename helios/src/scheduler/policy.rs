@@ -468,7 +468,10 @@ impl RequestScheduler {
                 if work == 0 {
                     continue;
                 }
-                if let Some(ns) = self.costs.duration(kind, 1, capacity) {
+                if let Some(ns) = self
+                    .costs
+                    .prefill_duration(kind, capacity, r.consumed_tokens)
+                {
                     consider(
                         ns,
                         value.prefill(
@@ -857,19 +860,31 @@ impl RequestScheduler {
         values: &[LaneValue; REQUEST_LANES],
         age_price: f64,
     ) {
-        let Some(duration_ns) = self.costs.duration(kind, batch, capacity) else {
+        let Some(base_duration_ns) = self.costs.duration(kind, batch, capacity) else {
             return;
         };
         let mut offers = [(0usize, 0.0); REQUEST_LANES];
+        let mut slot_durations = [base_duration_ns; REQUEST_LANES];
         let mut count = 0;
         for slot in bits(mask) {
             let r = self.slots[slot].request.as_ref().unwrap();
+            let slot_duration_ns = if kind.is_prefill() {
+                let Some(ns) = self
+                    .costs
+                    .prefill_duration(kind, capacity, r.consumed_tokens)
+                else {
+                    continue;
+                };
+                ns
+            } else {
+                base_duration_ns
+            };
             if kind.is_prefill() {
                 let catalog = self.prefill_catalog(kind);
                 let work = self.prefill_work(r, capacity);
                 // Explore larger graphs only when they can consume additional tokens.
                 if work == 0
-                    || (duration_ns == 0 && catalog.iter()
+                    || (slot_duration_ns == 0 && catalog.iter()
                         .take_while(|&&smaller| smaller < capacity)
                         .any(|&smaller| self.prefill_work(r, smaller) == work))
                 {
@@ -879,21 +894,36 @@ impl RequestScheduler {
             if kind == GraphKind::Vision && capacity < r.vision_patches[0] {
                 continue;
             }
+            slot_durations[slot] = slot_duration_ns;
             offers[count] = (
                 slot,
-                self.lane_value(r, kind, capacity, duration_ns, values[slot]),
+                self.lane_value(r, kind, capacity, slot_duration_ns, values[slot]),
             );
             count += 1;
         }
         if count == 0 {
             return;
         }
-        let selected = best_cohort::<REQUEST_LANES>(&offers[..count], batch);
-        let expected = offers[..count]
-            .iter()
-            .filter(|(s, _)| selected & (1 << s) != 0)
-            .map(|(_, v)| v)
-            .sum();
+        let (selected, expected, duration_ns) = if kind.is_prefill() {
+            let mut best: Option<(usize, f64, u64, ValueRate)> = None;
+            for &(slot, val) in &offers[..count] {
+                let ns = slot_durations[slot];
+                let rate = ValueRate::new(ns, val, age_price);
+                if best.is_none_or(|(_, _, _, old)| rate.compare(old).is_gt()) {
+                    best = Some((slot, val, ns, rate));
+                }
+            }
+            let (slot, val, ns, _) = best.unwrap();
+            (1u64 << slot, val, ns)
+        } else {
+            let selected = best_cohort::<REQUEST_LANES>(&offers[..count], batch);
+            let expected = offers[..count]
+                .iter()
+                .filter(|(s, _)| selected & (1 << s) != 0)
+                .map(|(_, v)| v)
+                .sum();
+            (selected, expected, base_duration_ns)
+        };
         let drafts = if kind == GraphKind::Speculative { capacity - 1 } else { 0 };
         let packed = if kind == GraphKind::Speculative { batch * capacity } else { 0 };
         let feedback = !self.costs.is_fresh(cost::Key { drafts,
@@ -1223,7 +1253,13 @@ impl RequestScheduler {
             let capacity = *catalog.iter().find(|&&capacity| capacity >= work)?;
             (capacity, 0, work)
         };
-        let duration_ns = self.costs.shape_duration(candidate.kind, candidate.batch, capacity, prefill)?;
+        let duration_ns = if mixed {
+            self.costs
+                .shape_duration(candidate.kind, candidate.batch, capacity, prefill)?
+        } else {
+            self.costs
+                .prefill_duration(candidate.kind, capacity, request.consumed_tokens)?
+        };
         candidate.capacity = capacity;
         candidate.prefill_capacity = prefill;
         candidate.work = work;

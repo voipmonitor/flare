@@ -179,7 +179,7 @@ impl RequestScheduler {
                 // does not make its predicted work unknown.
                 let nanos = self
                     .costs
-                    .duration(request.prefill_kind(), 1, capacity)
+                    .prefill_duration(request.prefill_kind(), capacity, request.consumed_tokens)
                     .filter(|&nanos| nanos != 0);
                 (capacity, nanos)
             })

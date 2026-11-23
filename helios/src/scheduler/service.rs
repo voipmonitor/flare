@@ -150,10 +150,15 @@ impl RequestScheduler {
         } else {
             None
         };
-        let mut consider = |kind, batch, capacity, tokens: f64, delivery: bool| {
+        let mut consider = |kind: GraphKind, batch, capacity, tokens: f64, delivery: bool| {
             let ns = if kind == GraphKind::Speculative {
                 self.speculative_duration(request, batch, capacity)
-            } else { self.costs.duration(kind, batch, capacity) };
+            } else if kind.is_prefill() {
+                self.costs
+                    .prefill_duration(kind, capacity, request.consumed_tokens)
+            } else {
+                self.costs.duration(kind, batch, capacity)
+            };
             if let Some(ns) = ns.filter(|n| *n > 0)
             {
                 let per_ms = 1e6 / ns as f64;
